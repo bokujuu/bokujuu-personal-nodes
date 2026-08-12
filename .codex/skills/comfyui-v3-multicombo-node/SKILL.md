@@ -1,11 +1,11 @@
 ---
 name: comfyui-v3-multicombo-node
-description: "Repo-local implementation practice for ComfyUI V3 node, MultiCombo. Use when working in this repository on Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG.."
+description: "Repo-local practice for ComfyUI V3 nodes that need a subgraph-safe LoRA multi-selector and deterministic local RNG."
 ---
 
-# Comfyui V3 Multicombo Node
+# ComfyUI V3 LoRA Multi-Selector
 
-Use this repo-local skill when working on Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG. in this repository.
+Use this repo-local skill when working on a ComfyUI V3 node with a searchable LoRA multi-selector and deterministic local RNG.
 
 ## Workflow
 
@@ -17,7 +17,8 @@ Use this repo-local skill when working on Implement ComfyUI V3 custom nodes with
 
 - `ComfyUI V3 node`
 - `MultiCombo`
+- `LoRA selector`
 
 ## Verification
 
-- `python -m unittest discover -s tests -v`
+- `D:\ComfyUI_20260315\.venv\Scripts\python.exe -m unittest discover -s tests -v`

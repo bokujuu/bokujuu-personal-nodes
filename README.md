@@ -39,7 +39,7 @@ The editable test workflow is `workflows/da3_large_1.1_test.json`. It uses Comfy
 
 Assigns reproducible random weights to every selected LoRA and returns an EasyUse-compatible `LORA_STACK`.
 
-- Select any number of LoRAs with one searchable multi-select input.
+- Click `Select LoRAs` to choose any number of LoRAs in a searchable multi-select dialog. The node shows the current count and selected filenames.
 - `minimum_strength` accepts negative and positive values.
 - Every non-empty LoRA input is included in the output stack.
 - `loaded_loras` reports the complete current stack without relying on a separate Show Any node.
