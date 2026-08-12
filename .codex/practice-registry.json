@@ -1,0 +1,21 @@
+{
+  "version": "2026.03",
+  "entries": [
+    {
+      "slug": "comfyui-v3-multicombo-node",
+      "summary": "Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG.",
+      "trigger_keywords": [
+        "ComfyUI V3 node",
+        "MultiCombo"
+      ],
+      "verification_commands": [
+        "python -m unittest discover -s tests -v"
+      ],
+      "source_urls": [
+        "https://github.com/Comfy-Org/ComfyUI"
+      ],
+      "skill_path": ".codex/skills/comfyui-v3-multicombo-node",
+      "status": "draft"
+    }
+  ]
+}

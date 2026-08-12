@@ -1,0 +1,5 @@
+interface:
+  display_name: "Comfyui V3 Multicombo Node"
+  short_description: "Follow the repo-local practice for Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG.."
+  default_prompt: "Use the local skill at .codex/skills/comfyui-v3-multicombo-node to follow the repository practice for Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG.."
+allow_implicit_invocation: false
