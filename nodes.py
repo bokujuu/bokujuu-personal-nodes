@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import random
@@ -259,17 +260,32 @@ def format_stack_report(stack):
     return "\n".join(lines)
 
 
+def parse_lora_selection(value):
+    if isinstance(value, list):
+        return [name for name in value if isinstance(name, str) and name]
+    if not value:
+        return []
+    try:
+        selected = json.loads(value)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("LoRA selection must be a JSON list") from exc
+    if not isinstance(selected, list):
+        raise ValueError("LoRA selection must be a JSON list")
+    return [name for name in selected if isinstance(name, str) and name]
+
+
 class BokujuuLoraWeightRandomizer(io.ComfyNode):
     @classmethod
     def define_schema(cls):
-        lora_input = io.MultiCombo.Input(
+        lora_input = io.String.Input(
             "loras",
-            options=[""] + folder_paths.get_filename_list("loras"),
-            default=[],
-            placeholder="Select LoRAs",
-            chip=True,
+            default="[]",
             socketless=True,
+            extra_dict={
+                "options": folder_paths.get_filename_list("loras"),
+            },
         )
+        lora_input.widget_type = "BOKUJUU_LORA_SELECTOR"
         return io.Schema(
             node_id="BokujuuLoraWeightRandomizer",
             display_name="Bokujuu LoRA Weight Randomizer",
@@ -309,7 +325,7 @@ class BokujuuLoraWeightRandomizer(io.ComfyNode):
         input_lora_stack=None,
     ):
         base = [_normalize_stack_row(row) for row in (input_lora_stack or [])]
-        candidates = [name for name in (loras or []) if name]
+        candidates = parse_lora_selection(loras)
 
         strengths = random_strengths(
             len(candidates),

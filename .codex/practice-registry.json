@@ -3,16 +3,18 @@
   "entries": [
     {
       "slug": "comfyui-v3-multicombo-node",
-      "summary": "Implement ComfyUI V3 custom nodes with a MultiCombo list widget and deterministic local RNG.",
+      "summary": "Implement ComfyUI V3 custom nodes with a subgraph-safe searchable LoRA selector and deterministic local RNG.",
       "trigger_keywords": [
         "ComfyUI V3 node",
-        "MultiCombo"
+        "MultiCombo",
+        "LoRA selector"
       ],
       "verification_commands": [
-        "python -m unittest discover -s tests -v"
+        "D:\\ComfyUI_20260315\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v"
       ],
       "source_urls": [
-        "https://github.com/Comfy-Org/ComfyUI"
+        "https://github.com/Comfy-Org/ComfyUI",
+        "https://github.com/Comfy-Org/ComfyUI_frontend"
       ],
       "skill_path": ".codex/skills/comfyui-v3-multicombo-node",
       "status": "draft"

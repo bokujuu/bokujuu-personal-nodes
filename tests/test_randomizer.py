@@ -50,6 +50,15 @@ class RandomStrengthTests(unittest.TestCase):
         self.assertIn("a.safetensors", report)
         self.assertIn("b.safetensors", report)
 
+    def test_selection_accepts_widget_json_and_legacy_list(self):
+        expected = ["a.safetensors", "folder\\b.safetensors"]
+        self.assertEqual(NODES.parse_lora_selection('["a.safetensors", "folder\\\\b.safetensors"]'), expected)
+        self.assertEqual(NODES.parse_lora_selection(expected), expected)
+
+    def test_selection_rejects_non_list_json(self):
+        with self.assertRaises(ValueError):
+            NODES.parse_lora_selection('{"lora": "a.safetensors"}')
+
 
 if __name__ == "__main__":
     unittest.main()
