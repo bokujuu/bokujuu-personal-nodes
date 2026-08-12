@@ -1,9 +1,170 @@
 import math
+import os
 import random
 
 import folder_paths
+import torch
+import comfy.sd
+import comfy.utils
+from comfy.ldm.colormap import turbo
+from comfy_extras.nodes_depth_anything_3 import DA3Inference, DA3ModelType, DA3Render
 from comfy_api.latest import ComfyExtension, io
+from huggingface_hub import hf_hub_download
 from typing_extensions import override
+
+
+DA3_REPO_ID = "depth-anything/DA3-LARGE-1.1"
+DA3_REPO_FILENAME = "model.safetensors"
+DA3_MODEL_FILENAME = "depth_anything_3_large_1.1.safetensors"
+
+_COLOR_THEMES = {
+    "viridis": (
+        (0.267, 0.005, 0.329),
+        (0.230, 0.322, 0.546),
+        (0.128, 0.567, 0.551),
+        (0.369, 0.789, 0.383),
+        (0.993, 0.906, 0.144),
+    ),
+    "plasma": (
+        (0.050, 0.030, 0.528),
+        (0.494, 0.012, 0.658),
+        (0.798, 0.280, 0.470),
+        (0.973, 0.586, 0.252),
+        (0.940, 0.975, 0.131),
+    ),
+    "inferno": (
+        (0.001, 0.000, 0.014),
+        (0.258, 0.039, 0.406),
+        (0.578, 0.148, 0.404),
+        (0.865, 0.317, 0.226),
+        (0.988, 0.998, 0.645),
+    ),
+}
+
+
+def _geometry_model_path(filename=DA3_MODEL_FILENAME):
+    return os.path.join(folder_paths.models_dir, "geometry_estimation", filename)
+
+
+def _strip_model_prefix(state_dict):
+    if "model.backbone.pretrained.patch_embed.proj.weight" not in state_dict:
+        return state_dict
+    return {key[6:] if key.startswith("model.") else key: value for key, value in state_dict.items()}
+
+
+def _expand_shared_aux_weights(state_dict):
+    for key in [key for key in state_dict if "output_conv2_aux.0." in key]:
+        prefix, suffix = key.split("output_conv2_aux.0.", 1)
+        for index in range(1, 4):
+            target = f"{prefix}output_conv2_aux.{index}.{suffix}"
+            if target not in state_dict:
+                state_dict[target] = state_dict[key].clone()
+    return state_dict
+
+
+def convert_da3_state_dict(state_dict):
+    state_dict = _strip_model_prefix(state_dict)
+    prefix = "backbone."
+    source_prefix = prefix + "pretrained."
+    if prefix + "embeddings.patch_embeddings.projection.weight" in state_dict:
+        return _expand_shared_aux_weights(state_dict)
+    if source_prefix + "patch_embed.proj.weight" not in state_dict:
+        raise ValueError(f"{DA3_REPO_ID} checkpoint has an unsupported state-dict layout")
+
+    for key in list(state_dict):
+        if key.startswith(("gs_head.", "gs_adapter.")):
+            state_dict.pop(key)
+
+    static_renames = {
+        source_prefix + "patch_embed.proj.weight": prefix + "embeddings.patch_embeddings.projection.weight",
+        source_prefix + "patch_embed.proj.bias": prefix + "embeddings.patch_embeddings.projection.bias",
+        source_prefix + "pos_embed": prefix + "embeddings.position_embeddings",
+        source_prefix + "cls_token": prefix + "embeddings.cls_token",
+        source_prefix + "camera_token": prefix + "embeddings.camera_token",
+        source_prefix + "norm.weight": prefix + "layernorm.weight",
+        source_prefix + "norm.bias": prefix + "layernorm.bias",
+    }
+    for source, target in static_renames.items():
+        if source in state_dict:
+            state_dict[target] = state_dict.pop(source)
+
+    block_prefix = source_prefix + "blocks."
+    for key in [key for key in state_dict if key.startswith(block_prefix)]:
+        rest = key[len(block_prefix):]
+        index, _, suffix = rest.partition(".")
+        target_prefix = f"{prefix}encoder.layer.{index}."
+
+        if suffix in ("attn.qkv.weight", "attn.qkv.bias"):
+            qkv = state_dict.pop(key)
+            query, key_tensor, value = qkv.chunk(3, dim=0)
+            parameter = "weight" if suffix.endswith("weight") else "bias"
+            state_dict[target_prefix + f"attention.attention.query.{parameter}"] = query.contiguous()
+            state_dict[target_prefix + f"attention.attention.key.{parameter}"] = key_tensor.contiguous()
+            state_dict[target_prefix + f"attention.attention.value.{parameter}"] = value.contiguous()
+            continue
+
+        replacements = (
+            ("attn.proj.", "attention.output.dense."),
+            ("attn.q_norm.", "attention.q_norm."),
+            ("attn.k_norm.", "attention.k_norm."),
+            ("mlp.w12.", "mlp.weights_in."),
+            ("mlp.w3.", "mlp.weights_out."),
+        )
+        target_suffix = None
+        for source, target in replacements:
+            if suffix.startswith(source):
+                target_suffix = target + suffix[len(source):]
+                break
+        if suffix == "ls1.gamma":
+            target_suffix = "layer_scale1.lambda1"
+        elif suffix == "ls2.gamma":
+            target_suffix = "layer_scale2.lambda1"
+        elif suffix.startswith(("norm1.", "norm2.", "mlp.fc1.", "mlp.fc2.")):
+            target_suffix = suffix
+
+        if target_suffix is not None:
+            state_dict[target_prefix + target_suffix] = state_dict.pop(key)
+
+    return _expand_shared_aux_weights(state_dict)
+
+
+def ensure_da3_large_model():
+    model_path = _geometry_model_path()
+    if os.path.isfile(model_path):
+        return model_path
+
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    source_path = hf_hub_download(repo_id=DA3_REPO_ID, filename=DA3_REPO_FILENAME)
+    state_dict, metadata = comfy.utils.load_torch_file(source_path, return_metadata=True)
+    state_dict = convert_da3_state_dict(state_dict)
+    metadata = dict(metadata or {})
+    metadata.update({"source_repo": DA3_REPO_ID, "source_file": DA3_REPO_FILENAME})
+
+    temporary_path = model_path + ".tmp"
+    try:
+        comfy.utils.save_torch_file(state_dict, temporary_path, metadata=metadata)
+        os.replace(temporary_path, model_path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.remove(temporary_path)
+    return model_path
+
+
+def apply_color_theme(values, theme):
+    values = values.clamp(0.0, 1.0)
+    if theme == "grayscale":
+        return values.unsqueeze(-1).expand(*values.shape, 3).contiguous()
+    if theme == "grayscale_inverted":
+        inverted = 1.0 - values
+        return inverted.unsqueeze(-1).expand(*values.shape, 3).contiguous()
+    if theme == "turbo":
+        return turbo(values)
+
+    colors = values.new_tensor(_COLOR_THEMES[theme])
+    position = values * (len(colors) - 1)
+    lower = position.floor().long().clamp(max=len(colors) - 2)
+    fraction = (position - lower).unsqueeze(-1)
+    return torch.lerp(colors[lower], colors[lower + 1], fraction)
 
 
 def _normalize_stack_row(row):
@@ -163,7 +324,101 @@ class BokujuuLoraWeightRandomizer(io.ComfyNode):
         return io.NodeOutput(stack, format_stack_report(stack), len(stack))
 
 
+class BokujuuLoadDepthAnything3(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuLoadDepthAnything3",
+            display_name="Bokujuu Load Depth Anything 3",
+            category="Bokujuu/Depth",
+            description="Downloads DA3-LARGE-1.1 when needed, converts it to ComfyUI's native format, and loads it.",
+            inputs=[
+                io.Combo.Input("model", options=[DA3_REPO_ID], default=DA3_REPO_ID),
+                io.Combo.Input(
+                    "weight_dtype",
+                    options=["default", "fp16", "bf16", "fp32"],
+                    default="default",
+                ),
+            ],
+            outputs=[DA3ModelType.Output(display_name="da3_model")],
+        )
+
+    @classmethod
+    def execute(cls, model, weight_dtype):
+        if model != DA3_REPO_ID:
+            raise ValueError(f"Unsupported model: {model}")
+
+        model_options = {}
+        if weight_dtype == "fp16":
+            model_options["dtype"] = torch.float16
+        elif weight_dtype == "bf16":
+            model_options["dtype"] = torch.bfloat16
+        elif weight_dtype == "fp32":
+            model_options["dtype"] = torch.float32
+
+        return io.NodeOutput(comfy.sd.load_diffusion_model(ensure_da3_large_model(), model_options=model_options))
+
+
+class BokujuuDepthAnything3(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuDepthAnything3",
+            display_name="Bokujuu Depth Anything 3",
+            category="Bokujuu/Depth",
+            description="Creates an editable depth image from an input image with DA3-LARGE-1.1.",
+            inputs=[
+                DA3ModelType.Input("da3_model"),
+                io.Image.Input("image"),
+                io.Int.Input("resolution", default=504, min=140, max=2520, step=14),
+                io.Combo.Input(
+                    "resize_method",
+                    options=["upper_bound_resize", "lower_bound_resize"],
+                    default="upper_bound_resize",
+                ),
+                io.Combo.Input(
+                    "normalization",
+                    options=["v2_style", "min_max"],
+                    default="v2_style",
+                ),
+                io.Combo.Input(
+                    "color_theme",
+                    options=["grayscale", "grayscale_inverted", "turbo", "viridis", "plasma", "inferno"],
+                    default="grayscale",
+                ),
+                io.Float.Input("contrast", default=1.0, min=0.0, max=3.0, step=0.05),
+                io.Float.Input("gamma", default=1.0, min=0.1, max=5.0, step=0.05),
+            ],
+            outputs=[io.Image.Output(display_name="depth_image")],
+        )
+
+    @classmethod
+    def execute(cls, da3_model, image, resolution, resize_method, normalization, color_theme, contrast, gamma):
+        geometry = DA3Inference.execute(
+            da3_model,
+            image,
+            resolution,
+            resize_method,
+            {"mode": "mono"},
+        )[0]
+        grey = DA3Render.execute(
+            geometry,
+            {
+                "output": "depth",
+                "normalization": normalization,
+                "apply_sky_clip": False,
+            },
+        )[0][..., 0]
+        grey = ((grey - 0.5) * contrast + 0.5).clamp(0.0, 1.0)
+        grey = grey.pow(1.0 / gamma)
+        return io.NodeOutput(apply_color_theme(grey, color_theme).float())
+
+
 class BokujuuPersonalNodes(ComfyExtension):
     @override
     async def get_node_list(self):
-        return [BokujuuLoraWeightRandomizer]
+        return [
+            BokujuuLoraWeightRandomizer,
+            BokujuuLoadDepthAnything3,
+            BokujuuDepthAnything3,
+        ]

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Comfyui Da3 Custom Node"
+  short_description: "Follow the repo-local practice for Implement a ComfyUI V3 custom node that downloads, converts, loads, and runs official Depth Anything 3 checkpoints through ComfyUI core.."
+  default_prompt: "Use the local skill at .codex/skills/comfyui-da3-custom-node to follow the repository practice for Implement a ComfyUI V3 custom node that downloads, converts, loads, and runs official Depth Anything 3 checkpoints through ComfyUI core.."
+allow_implicit_invocation: false

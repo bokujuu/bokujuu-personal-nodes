@@ -1,0 +1,33 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "example.png"}
+  },
+  "2": {
+    "class_type": "BokujuuLoadDepthAnything3",
+    "inputs": {
+      "model": "depth-anything/DA3-LARGE-1.1",
+      "weight_dtype": "fp16"
+    }
+  },
+  "3": {
+    "class_type": "BokujuuDepthAnything3",
+    "inputs": {
+      "da3_model": ["2", 0],
+      "image": ["1", 0],
+      "resolution": 504,
+      "resize_method": "upper_bound_resize",
+      "normalization": "v2_style",
+      "color_theme": "grayscale",
+      "contrast": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "4": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "bokujuu_da3_test/DA3-LARGE-1.1",
+      "images": ["3", 0]
+    }
+  }
+}
