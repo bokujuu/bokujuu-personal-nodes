@@ -15,6 +15,26 @@ The model download only occurs when the loader node is executed and the converte
 
 The editable test workflow is `workflows/da3_large_1.1_test.json`. It uses ComfyUI's bundled `input/example.png` and writes its result under `output/bokujuu_da3_test/`. The companion `da3_large_1.1_test_api.json` can be submitted directly to the `/prompt` API for automated testing.
 
+### Usage
+
+1. Add `Bokujuu Load Depth Anything 3` and `Bokujuu Depth Anything 3`.
+2. Connect the loader's `da3_model` output to the processing node.
+3. Connect an `IMAGE` to the processing node and route `depth_image` to `Preview Image`, `Save Image`, or a ControlNet workflow.
+4. Keep `color_theme` at `grayscale` for the usual depth-map appearance, or select another palette for visualization.
+
+### Processing settings
+
+- `resolution`: DA3 inference resolution. Higher values retain more detail and require more VRAM.
+- `resize_method`: `upper_bound_resize` limits the longest side; `lower_bound_resize` preserves more detail on wide or tall images at higher memory cost.
+- `normalization`: `v2_style` gives a perceptually balanced result; `min_max` stretches each depth map across the full output range.
+- `contrast` and `gamma`: adjust the normalized image before applying the selected color theme.
+
+### Notes
+
+- The first loader execution downloads the upstream checkpoint (about 1.64 GB) and writes a converted ComfyUI checkpoint. Later runs reuse that local file.
+- This node currently uses the monocular inference path and returns one relative-depth image for each input image. Camera poses, metric depth, meshes, and point clouds are intentionally outside its scope.
+- Review and follow the license published with the upstream [`depth-anything/DA3-LARGE-1.1`](https://huggingface.co/depth-anything/DA3-LARGE-1.1) model before distribution or commercial use.
+
 ## Bokujuu LoRA Weight Randomizer
 
 Assigns reproducible random weights to every selected LoRA and returns an EasyUse-compatible `LORA_STACK`.
