@@ -1,0 +1,145 @@
+{
+  "id": "bokujuu-random-lora-selector-example",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BokujuuRandomLoraSelector",
+      "pos": [80, 120],
+      "size": [500, 390],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "input_lora_stack",
+          "name": "input_lora_stack",
+          "shape": 7,
+          "type": "LORA_STACK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "lora_stack",
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "slot_index": 0,
+          "links": [1]
+        },
+        {
+          "localized_name": "loaded_loras",
+          "name": "loaded_loras",
+          "type": "STRING",
+          "slot_index": 1,
+          "links": null
+        },
+        {
+          "localized_name": "lora_count",
+          "name": "lora_count",
+          "type": "INT",
+          "slot_index": 2,
+          "links": null
+        }
+      ],
+      "title": "Randomly select 2 LoRAs from this pool",
+      "properties": {
+        "Node name for S&R": "BokujuuRandomLoraSelector"
+      },
+      "widgets_values": [
+        2,
+        0.2,
+        0.8,
+        0,
+        "randomize",
+        [
+          "Anima\\anima-base-1-blending-v2.safetensors",
+          "Anima\\anima-base-1-light-concepts-v31.safetensors",
+          "Anima\\anima-base-1-masterpiece-v51.safetensors",
+          "Anima\\anima-base-1-painterly-v2.safetensors"
+        ]
+      ],
+      "color": "#3a2a4a",
+      "bgcolor": "#4a3a5a"
+    },
+    {
+      "id": 2,
+      "type": "easy loraStackApply",
+      "pos": [680, 160],
+      "size": [300, 130],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "lora_stack",
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "link": 1
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "optional_clip",
+          "name": "optional_clip",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": null
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "slot_index": 1,
+          "links": null
+        }
+      ],
+      "title": "Apply the selected LoRA stack",
+      "properties": {
+        "Node name for S&R": "easy loraStackApply"
+      },
+      "widgets_values": [],
+      "color": "#3a2a4a",
+      "bgcolor": "#4a3a5a"
+    },
+    {
+      "id": 3,
+      "type": "Note",
+      "pos": [680, 330],
+      "size": [460, 180],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "1. Open Select LoRAs and replace the example pool with your installed LoRAs.\n2. Set selection_count, Minimum, Maximum, and seed.\n3. Connect your MODEL and optional CLIP to Apply the selected LoRA stack.\n4. Use loaded_loras to inspect the actual selection and strengths after execution."
+      },
+      "widgets_values": [""]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "LORA_STACK"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
+}
