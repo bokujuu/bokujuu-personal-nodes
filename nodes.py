@@ -274,18 +274,42 @@ def parse_lora_selection(value):
     return [name for name in selected if isinstance(name, str) and name]
 
 
+def random_lora_stack_rows(candidates, selection_count, minimum_strength, maximum_strength, seed, maximum_count=None):
+    candidates = list(dict.fromkeys(candidates))
+    rng = random.Random(int(seed))
+    minimum_count = min(max(int(selection_count), 0), len(candidates))
+    if maximum_count is None:
+        count = minimum_count
+    else:
+        maximum_count = min(max(int(maximum_count), minimum_count), len(candidates))
+        count = rng.randint(minimum_count, maximum_count) if maximum_count > minimum_count else minimum_count
+    selected = rng.sample(candidates, count)
+
+    minimum_cents = round(float(minimum_strength) * 100)
+    maximum_cents = max(round(float(maximum_strength) * 100), minimum_cents)
+    result = []
+    for name in selected:
+        strength = rng.randint(minimum_cents, maximum_cents) / 100
+        result.append([name, strength, strength])
+    return result
+
+
+def _lora_selector_input():
+    lora_input = io.String.Input(
+        "loras",
+        default="[]",
+        socketless=True,
+        extra_dict={
+            "options": folder_paths.get_filename_list("loras"),
+        },
+    )
+    lora_input.widget_type = "BOKUJUU_LORA_SELECTOR"
+    return lora_input
+
+
 class BokujuuLoraWeightRandomizer(io.ComfyNode):
     @classmethod
     def define_schema(cls):
-        lora_input = io.String.Input(
-            "loras",
-            default="[]",
-            socketless=True,
-            extra_dict={
-                "options": folder_paths.get_filename_list("loras"),
-            },
-        )
-        lora_input.widget_type = "BOKUJUU_LORA_SELECTOR"
         return io.Schema(
             node_id="BokujuuLoraWeightRandomizer",
             display_name="Bokujuu LoRA Weight Randomizer",
@@ -303,7 +327,7 @@ class BokujuuLoraWeightRandomizer(io.ComfyNode):
                     max=0xFFFFFFFFFFFFFFFF,
                     control_after_generate=True,
                 ),
-                lora_input,
+                _lora_selector_input(),
                 io.Custom("LORA_STACK").Input("input_lora_stack", optional=True),
             ],
             outputs=[
@@ -336,6 +360,92 @@ class BokujuuLoraWeightRandomizer(io.ComfyNode):
             seed,
         )
         generated = [[name, strength, strength] for name, strength in zip(candidates, strengths)]
+        stack = _merge_lora_stack(base + generated)
+        return io.NodeOutput(stack, format_stack_report(stack), len(stack))
+
+
+class BokujuuRandomLoraSelector(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuRandomLoraSelector",
+            display_name="Bokujuu Random LoRA Selector",
+            category="Bokujuu/LoRA",
+            description="Selects a seeded random count of LoRAs without replacement and assigns each a random strength.",
+            inputs=[
+                io.Int.Input("selection_count", display_name="minimum_count", default=1, min=1, max=1000),
+                io.Float.Input("minimum_strength", default=0.0, min=-10.0, max=10.0, step=0.01),
+                io.Float.Input("maximum_strength", default=1.0, min=-10.0, max=10.0, step=0.01),
+                io.Int.Input(
+                    "seed",
+                    default=0,
+                    min=0,
+                    max=0xFFFFFFFFFFFFFFFF,
+                    control_after_generate=True,
+                ),
+                _lora_selector_input(),
+                io.Int.Input("maximum_count", default=1, min=1, max=1000, optional=True),
+                io.Custom("LORA_STACK").Input("input_lora_stack", optional=True),
+            ],
+            outputs=[
+                io.Custom("LORA_STACK").Output(display_name="lora_stack"),
+                io.String.Output(display_name="loaded_loras"),
+                io.Int.Output(display_name="lora_count"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        selection_count,
+        minimum_strength,
+        maximum_strength,
+        seed,
+        loras=None,
+        input_lora_stack=None,
+        maximum_count=None,
+    ):
+        base = [_normalize_stack_row(row) for row in (input_lora_stack or [])]
+        generated = random_lora_stack_rows(
+            parse_lora_selection(loras),
+            selection_count,
+            minimum_strength,
+            maximum_strength,
+            seed,
+            maximum_count,
+        )
+        stack = _merge_lora_stack(base + generated)
+        return io.NodeOutput(stack, format_stack_report(stack), len(stack))
+
+
+class BokujuuPersonalLora(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuPersonalLora",
+            display_name="Personal-LoRA",
+            category="Bokujuu/LoRA",
+            description="Builds an EasyUse-compatible LoRA stack with fixed model and CLIP strengths.",
+            inputs=[
+                io.Float.Input("model_strength", default=1.0, min=-10.0, max=10.0, step=0.01),
+                io.Float.Input("clip_strength", default=1.0, min=-10.0, max=10.0, step=0.01),
+                _lora_selector_input(),
+                io.Custom("LORA_STACK").Input("input_lora_stack", optional=True),
+            ],
+            outputs=[
+                io.Custom("LORA_STACK").Output(display_name="lora_stack"),
+                io.String.Output(display_name="loaded_loras"),
+                io.Int.Output(display_name="lora_count"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, model_strength, clip_strength, loras=None, input_lora_stack=None):
+        base = [_normalize_stack_row(row) for row in (input_lora_stack or [])]
+        generated = [
+            [name, float(model_strength), float(clip_strength)]
+            for name in parse_lora_selection(loras)
+        ]
         stack = _merge_lora_stack(base + generated)
         return io.NodeOutput(stack, format_stack_report(stack), len(stack))
 
@@ -435,6 +545,8 @@ class BokujuuPersonalNodes(ComfyExtension):
     async def get_node_list(self):
         return [
             BokujuuLoraWeightRandomizer,
+            BokujuuRandomLoraSelector,
+            BokujuuPersonalLora,
             BokujuuLoadDepthAnything3,
             BokujuuDepthAnything3,
         ]

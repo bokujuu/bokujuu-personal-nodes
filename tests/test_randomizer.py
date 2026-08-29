@@ -1,4 +1,6 @@
+import asyncio
 import importlib.util
+import json
 import random
 import sys
 import unittest
@@ -58,6 +60,108 @@ class RandomStrengthTests(unittest.TestCase):
     def test_selection_rejects_non_list_json(self):
         with self.assertRaises(ValueError):
             NODES.parse_lora_selection('{"lora": "a.safetensors"}')
+
+    def test_random_lora_selection_is_reproducible_without_duplicates(self):
+        candidates = [f"lora_{index}.safetensors" for index in range(8)]
+        first = NODES.random_lora_stack_rows(candidates, 3, -0.5, 0.75, 1234)
+        second = NODES.random_lora_stack_rows(candidates, 3, -0.5, 0.75, 1234)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 3)
+        self.assertEqual(len({row[0] for row in first}), 3)
+        self.assertTrue(all(-0.5 <= row[1] <= 0.75 and row[1] == row[2] for row in first))
+
+    def test_fixed_count_keeps_existing_seed_result(self):
+        candidates = [f"lora_{index}.safetensors" for index in range(8)]
+        rows = NODES.random_lora_stack_rows(candidates, 3, -0.5, 0.75, 1234)
+        self.assertEqual(rows, [
+            ["lora_7.safetensors", -0.39, -0.39],
+            ["lora_0.safetensors", 0.66, 0.66],
+            ["lora_6.safetensors", 0.7, 0.7],
+        ])
+
+    def test_random_lora_count_is_reproducible_within_range(self):
+        candidates = [f"lora_{index}.safetensors" for index in range(10)]
+        first = NODES.random_lora_stack_rows(candidates, 2, 0.2, 0.8, 1234, 5)
+        second = NODES.random_lora_stack_rows(candidates, 2, 0.2, 0.8, 1234, 5)
+
+        self.assertEqual(first, second)
+        self.assertGreaterEqual(len(first), 2)
+        self.assertLessEqual(len(first), 5)
+
+    def test_random_lora_count_uses_minimum_when_maximum_is_lower(self):
+        candidates = [f"lora_{index}.safetensors" for index in range(8)]
+        rows = NODES.random_lora_stack_rows(candidates, 4, 0.2, 0.8, 1234, 2)
+        self.assertEqual(len(rows), 4)
+
+    def test_random_lora_selection_clamps_count_and_deduplicates_candidates(self):
+        rows = NODES.random_lora_stack_rows(["a.safetensors", "a.safetensors", "b.safetensors"], 10, 0.2, 0.6, 7)
+        self.assertEqual({row[0] for row in rows}, {"a.safetensors", "b.safetensors"})
+        self.assertEqual(len(rows), 2)
+
+    def test_random_lora_selection_handles_reversed_range_without_global_rng_changes(self):
+        random.seed(99)
+        expected = random.random()
+        random.seed(99)
+        rows = NODES.random_lora_stack_rows(["a.safetensors", "b.safetensors"], 2, 0.4, 0.2, 7)
+
+        self.assertEqual([row[1] for row in rows], [0.4, 0.4])
+        self.assertEqual(random.random(), expected)
+
+    def test_random_lora_sample_workflow_connects_stack_apply(self):
+        workflow_path = Path(__file__).resolve().parents[1] / "workflows" / "random_lora_selector_example.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        node_types = {node["id"]: node["type"] for node in workflow["nodes"]}
+        selector = next(node for node in workflow["nodes"] if node["id"] == 1)
+
+        self.assertEqual(node_types[1], "BokujuuRandomLoraSelector")
+        self.assertEqual(node_types[2], "easy loraStackApply")
+        self.assertIn([1, 1, 0, 2, 0, "LORA_STACK"], workflow["links"])
+        self.assertEqual(selector["widgets_values"][0], 1)
+        self.assertEqual(selector["widgets_values"][-1], 3)
+
+    def test_random_lora_selector_is_registered(self):
+        node_classes = asyncio.run(NODES.BokujuuPersonalNodes().get_node_list())
+        self.assertIn(NODES.BokujuuRandomLoraSelector, node_classes)
+
+    def test_random_lora_selector_exposes_backward_compatible_count_range(self):
+        schema = NODES.BokujuuRandomLoraSelector.define_schema()
+        minimum_count = next(item for item in schema.inputs if item.id == "selection_count")
+        maximum_count = next(item for item in schema.inputs if item.id == "maximum_count")
+
+        self.assertEqual(minimum_count.display_name, "minimum_count")
+        self.assertTrue(maximum_count.optional)
+        self.assertEqual(maximum_count.default, 1)
+
+    def test_random_lora_selector_executes_and_merges_input_stack(self):
+        output = NODES.BokujuuRandomLoraSelector.execute(
+            2,
+            0.2,
+            0.8,
+            42,
+            ["a.safetensors", "b.safetensors", "c.safetensors"],
+            [["fixed.safetensors", 0.5, 0.6]],
+        )
+        stack, report, count = output.result
+
+        self.assertEqual(stack[0], ["fixed.safetensors", 0.5, 0.6])
+        self.assertEqual(count, 3)
+        self.assertIn("Loaded LoRAs: 3", report)
+
+    def test_random_lora_selector_executes_with_count_range(self):
+        output = NODES.BokujuuRandomLoraSelector.execute(
+            2,
+            0.2,
+            0.8,
+            42,
+            [f"lora_{index}.safetensors" for index in range(8)],
+            maximum_count=5,
+        )
+        stack, report, count = output.result
+
+        self.assertGreaterEqual(count, 2)
+        self.assertLessEqual(count, 5)
+        self.assertEqual(report.splitlines()[0], f"Loaded LoRAs: {len(stack)}")
 
 
 if __name__ == "__main__":

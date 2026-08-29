@@ -48,6 +48,26 @@ Assigns reproducible random weights to every selected LoRA and returns an EasyUs
 
 `total_strength` is the target sum for the LoRAs configured on this node. When the target is outside the feasible range for the selected count and strength bounds, it is clamped to that range. If `minimum_strength` is greater than `maximum_strength`, the minimum is used as the effective maximum and no error is raised.
 
+## Bokujuu Random LoRA Selector
+
+Builds a lottery pool from explicitly selected LoRAs, randomly selects a count between `minimum_count` and `maximum_count`, then draws that many entries without replacement. Each selected LoRA receives an independent random strength between `minimum_strength` and `maximum_strength`.
+
+- Use the searchable `Select LoRAs` dialog to define the pool; no folder-wide selection is required.
+- `seed` reproduces both the selected LoRAs and their strengths without changing the global Python or PyTorch random state.
+- The selected count and LoRA choices are both reproduced by `seed`.
+- If either count is larger than the pool, it is limited to the pool size. If `maximum_count` is smaller than `minimum_count`, the minimum is used.
+- Existing workflows without `maximum_count` keep the previous fixed `selection_count` behavior.
+- MODEL and CLIP receive the same random strength for each selected LoRA.
+- An optional incoming `LORA_STACK` is preserved and merged by LoRA name.
+
+If `minimum_strength` is greater than `maximum_strength`, every selected LoRA uses the minimum value, matching the existing weight randomizer behavior.
+
+Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable example is `workflows/random_lora_selector_example.json`; replace its example LoRA pool with files installed in your own `models/loras` directory.
+
+## Personal-LoRA
+
+`Personal-LoRA` builds the same `LORA_STACK` format without randomization. Choose one or more LoRAs with the searchable `Select LoRAs` dialog, then set fixed `model_strength` and `clip_strength` values for every selected LoRA. An incoming `LORA_STACK` is preserved and merged by LoRA name, so the node can be placed between stack-producing nodes inside a subgraph.
+
 ## Installation
 
 ```powershell
