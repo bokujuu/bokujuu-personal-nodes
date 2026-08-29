@@ -8,7 +8,7 @@
       "id": 1,
       "type": "BokujuuRandomLoraSelector",
       "pos": [80, 120],
-      "size": [500, 390],
+      "size": [500, 430],
       "flags": {},
       "order": 0,
       "mode": 0,
@@ -44,12 +44,12 @@
           "links": null
         }
       ],
-      "title": "Randomly select 2 LoRAs from this pool",
+      "title": "Randomly select 1-3 LoRAs from this pool",
       "properties": {
         "Node name for S&R": "BokujuuRandomLoraSelector"
       },
       "widgets_values": [
-        2,
+        1,
         0.2,
         0.8,
         0,
@@ -59,7 +59,8 @@
           "Anima\\anima-base-1-light-concepts-v31.safetensors",
           "Anima\\anima-base-1-masterpiece-v51.safetensors",
           "Anima\\anima-base-1-painterly-v2.safetensors"
-        ]
+        ],
+        3
       ],
       "color": "#3a2a4a",
       "bgcolor": "#4a3a5a"
@@ -128,7 +129,7 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "text": "1. Open Select LoRAs and replace the example pool with your installed LoRAs.\n2. Set selection_count, Minimum, Maximum, and seed.\n3. Connect your MODEL and optional CLIP to Apply the selected LoRA stack.\n4. Use loaded_loras to inspect the actual selection and strengths after execution."
+        "text": "1. Open Select LoRAs and replace the example pool with your installed LoRAs.\n2. Set minimum_count, maximum_count, strength bounds, and seed.\n3. Connect your MODEL and optional CLIP to Apply the selected LoRA stack.\n4. Use loaded_loras to inspect the actual selection and strengths after execution."
       },
       "widgets_values": [""]
     }

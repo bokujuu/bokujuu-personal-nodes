@@ -274,10 +274,15 @@ def parse_lora_selection(value):
     return [name for name in selected if isinstance(name, str) and name]
 
 
-def random_lora_stack_rows(candidates, selection_count, minimum_strength, maximum_strength, seed):
+def random_lora_stack_rows(candidates, selection_count, minimum_strength, maximum_strength, seed, maximum_count=None):
     candidates = list(dict.fromkeys(candidates))
     rng = random.Random(int(seed))
-    count = min(max(int(selection_count), 0), len(candidates))
+    minimum_count = min(max(int(selection_count), 0), len(candidates))
+    if maximum_count is None:
+        count = minimum_count
+    else:
+        maximum_count = min(max(int(maximum_count), minimum_count), len(candidates))
+        count = rng.randint(minimum_count, maximum_count) if maximum_count > minimum_count else minimum_count
     selected = rng.sample(candidates, count)
 
     minimum_cents = round(float(minimum_strength) * 100)
@@ -366,9 +371,9 @@ class BokujuuRandomLoraSelector(io.ComfyNode):
             node_id="BokujuuRandomLoraSelector",
             display_name="Bokujuu Random LoRA Selector",
             category="Bokujuu/LoRA",
-            description="Selects N LoRAs without replacement and assigns each a reproducible random strength.",
+            description="Selects a seeded random count of LoRAs without replacement and assigns each a random strength.",
             inputs=[
-                io.Int.Input("selection_count", default=1, min=1, max=1000),
+                io.Int.Input("selection_count", display_name="minimum_count", default=1, min=1, max=1000),
                 io.Float.Input("minimum_strength", default=0.0, min=-10.0, max=10.0, step=0.01),
                 io.Float.Input("maximum_strength", default=1.0, min=-10.0, max=10.0, step=0.01),
                 io.Int.Input(
@@ -379,6 +384,7 @@ class BokujuuRandomLoraSelector(io.ComfyNode):
                     control_after_generate=True,
                 ),
                 _lora_selector_input(),
+                io.Int.Input("maximum_count", default=1, min=1, max=1000, optional=True),
                 io.Custom("LORA_STACK").Input("input_lora_stack", optional=True),
             ],
             outputs=[
@@ -397,6 +403,7 @@ class BokujuuRandomLoraSelector(io.ComfyNode):
         seed,
         loras=None,
         input_lora_stack=None,
+        maximum_count=None,
     ):
         base = [_normalize_stack_row(row) for row in (input_lora_stack or [])]
         generated = random_lora_stack_rows(
@@ -405,6 +412,7 @@ class BokujuuRandomLoraSelector(io.ComfyNode):
             minimum_strength,
             maximum_strength,
             seed,
+            maximum_count,
         )
         stack = _merge_lora_stack(base + generated)
         return io.NodeOutput(stack, format_stack_report(stack), len(stack))

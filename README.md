@@ -50,11 +50,13 @@ Assigns reproducible random weights to every selected LoRA and returns an EasyUs
 
 ## Bokujuu Random LoRA Selector
 
-Builds a lottery pool from explicitly selected LoRAs, selects `selection_count` entries without replacement, and assigns each selected LoRA an independent random strength between `minimum_strength` and `maximum_strength`.
+Builds a lottery pool from explicitly selected LoRAs, randomly selects a count between `minimum_count` and `maximum_count`, then draws that many entries without replacement. Each selected LoRA receives an independent random strength between `minimum_strength` and `maximum_strength`.
 
 - Use the searchable `Select LoRAs` dialog to define the pool; no folder-wide selection is required.
 - `seed` reproduces both the selected LoRAs and their strengths without changing the global Python or PyTorch random state.
-- If `selection_count` is larger than the pool, every candidate is selected once.
+- The selected count and LoRA choices are both reproduced by `seed`.
+- If either count is larger than the pool, it is limited to the pool size. If `maximum_count` is smaller than `minimum_count`, the minimum is used.
+- Existing workflows without `maximum_count` keep the previous fixed `selection_count` behavior.
 - MODEL and CLIP receive the same random strength for each selected LoRA.
 - An optional incoming `LORA_STACK` is preserved and merged by LoRA name.
 
