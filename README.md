@@ -79,6 +79,18 @@ Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable examp
 
 The editable example is `workflows/webp_save_example.json`. It saves ComfyUI's bundled `input/example.png` under `output/bokujuu_webp/`.
 
+## Bokujuu Seed Control
+
+`Bokujuu Seed Control` is a frontend controller for seed widgets in the current graph. It detects nodes that use ComfyUI's `control_after_generate` setting and lets each one remain unchanged, keep its current value fixed, or randomize after every run.
+
+- Use `すべて固定`, `すべてランダム`, and `すべて解除` for bulk changes.
+- Each row shows the node id, title, seed value, and effective mode.
+- `↗` centers the canvas on the selected node.
+- Connected seed inputs are shown but disabled because their values are owned by the upstream connection.
+- If EasyUse's Global Seed node is present, the panel shows a conflict warning.
+
+The settings are stored in the workflow. The editable example is `workflows/seed_control_example.json`.
+
 ## Installation
 
 ```powershell

@@ -1,0 +1,105 @@
+{
+  "id": "bokujuu-seed-control-example",
+  "revision": 0,
+  "last_node_id": 6,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "RandomNoise",
+      "pos": [80, 100],
+      "size": [360, 90],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [{"name": "NOISE", "type": "NOISE", "links": null}],
+      "title": "Base composition seed",
+      "properties": {"Node name for S&R": "RandomNoise"},
+      "widgets_values": [12001, "randomize"]
+    },
+    {
+      "id": 2,
+      "type": "RandomNoise",
+      "pos": [80, 230],
+      "size": [360, 90],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [{"name": "NOISE", "type": "NOISE", "links": null}],
+      "title": "Detail pass seed",
+      "properties": {"Node name for S&R": "RandomNoise"},
+      "widgets_values": [34002, "randomize"]
+    },
+    {
+      "id": 3,
+      "type": "RandomNoise",
+      "pos": [80, 360],
+      "size": [360, 90],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [{"name": "NOISE", "type": "NOISE", "links": null}],
+      "title": "Upscale variation seed",
+      "properties": {"Node name for S&R": "RandomNoise"},
+      "widgets_values": [56003, "fixed"]
+    },
+    {
+      "id": 4,
+      "type": "BokujuuSeedControl",
+      "pos": [520, 80],
+      "size": [620, 360],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "BokujuuSeedControl",
+        "bokujuu_seed_overrides": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 5,
+      "type": "EmptyImage",
+      "pos": [80, 520],
+      "size": [270, 130],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"name": "width", "type": "INT", "widget": {"name": "width"}, "link": null},
+        {"name": "height", "type": "INT", "widget": {"name": "height"}, "link": null},
+        {"name": "batch_size", "type": "INT", "widget": {"name": "batch_size"}, "link": null},
+        {"name": "color", "type": "INT", "widget": {"name": "color"}, "link": null}
+      ],
+      "outputs": [{"name": "IMAGE", "type": "IMAGE", "links": [1]}],
+      "properties": {"Node name for S&R": "EmptyImage", "cnr_id": "comfy-core"},
+      "widgets_values": [128, 128, 1, 2105376]
+    },
+    {
+      "id": 6,
+      "type": "PreviewImage",
+      "pos": [380, 540],
+      "size": [250, 80],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 1}],
+      "outputs": [{"name": "images", "type": "IMAGE", "links": null}],
+      "properties": {"Node name for S&R": "PreviewImage", "cnr_id": "comfy-core"},
+      "widgets_values": []
+    }
+  ],
+  "links": [[1, 5, 0, 6, 0, "IMAGE"]],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {"scale": 1.05, "offset": [20, 10]},
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
+}
