@@ -35,6 +35,24 @@
       ],
       "skill_path": ".codex/skills/comfyui-da3-custom-node",
       "status": "draft"
+    },
+    {
+      "slug": "comfyui-frontend-controller",
+      "summary": "Build frontend dashboard nodes that control existing ComfyUI widgets without mutating server prompts.",
+      "trigger_keywords": [
+        "frontend controller",
+        "seed control",
+        "dashboard node"
+      ],
+      "verification_commands": [
+        "D:\\ComfyUI_20260315\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v"
+      ],
+      "source_urls": [
+        "https://docs.comfy.org/custom-nodes/js/javascript_hooks",
+        "https://github.com/Comfy-Org/ComfyUI_frontend/blob/main/src/scripts/widgets.ts"
+      ],
+      "skill_path": ".codex/skills/comfyui-frontend-controller",
+      "status": "draft"
     }
   ]
 }

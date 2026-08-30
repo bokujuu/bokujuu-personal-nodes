@@ -586,6 +586,23 @@ class BokujuuSaveWebP(io.ComfyNode):
         return io.NodeOutput(images, ui=ui.SavedImages(results))
 
 
+class BokujuuSeedControl(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuSeedControl",
+            display_name="Bokujuu Seed Control",
+            category="Bokujuu/Workflow",
+            description="Controls fixed and randomized seed modes for nodes in the current graph.",
+            inputs=[],
+            outputs=[],
+        )
+
+    @classmethod
+    def execute(cls):
+        return io.NodeOutput()
+
+
 class BokujuuPersonalNodes(ComfyExtension):
     @override
     async def get_node_list(self):
@@ -596,4 +613,5 @@ class BokujuuPersonalNodes(ComfyExtension):
             BokujuuLoadDepthAnything3,
             BokujuuDepthAnything3,
             BokujuuSaveWebP,
+            BokujuuSeedControl,
         ]
