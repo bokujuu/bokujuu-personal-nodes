@@ -37,6 +37,15 @@ class SeedControlTests(unittest.TestCase):
         self.assertIn("BokujuuSeedControl", node_types)
         self.assertIn([1, 5, 0, 6, 0, "IMAGE"], workflow["links"])
 
+    def test_frontend_walks_nested_subgraphs_and_localizes_labels(self):
+        source = (Path(__file__).resolve().parents[1] / "web" / "seed_control.js").read_text(encoding="utf-8")
+        self.assertIn("function visit(graph, path, graphIds)", source)
+        self.assertIn("node.isSubgraphNode?.() && node.subgraph", source)
+        self.assertIn("Fix All", source)
+        self.assertIn("すべて固定", source)
+        self.assertIn("bokujuu-fixed", source)
+        self.assertIn("mainWorkflow", source)
+
 
 if __name__ == "__main__":
     unittest.main()
