@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -30,6 +31,10 @@ class SaveWebPTests(unittest.TestCase):
         self.assertTrue(schema.is_output_node)
         self.assertNotIn("lossless", [node_input.id for node_input in schema.inputs])
 
+        prefix = next(node_input for node_input in schema.inputs if node_input.id == "filename_prefix")
+        self.assertIn("%date:yyyy-MM-dd%", prefix.tooltip)
+        self.assertIn("%Empty Latent Image.width%", prefix.tooltip)
+
     def test_saves_lossy_webp_with_prompt_and_workflow(self):
         prompt = {"1": {"class_type": "EmptyImage", "inputs": {"width": 64, "height": 64}}}
         workflow = json.loads((MODULE_PATH.parent / "workflows" / "webp_save_example.json").read_text(encoding="utf-8"))
@@ -55,6 +60,45 @@ class SaveWebPTests(unittest.TestCase):
 
             self.assertEqual(json.loads(exif[0x0110].split(":", 1)[1]), prompt)
             self.assertEqual(json.loads(exif[0x010F].split(":", 1)[1]), workflow)
+
+    def test_expands_date_tokens_like_save_image(self):
+        when = datetime(2026, 8, 30, 10, 54, 7)
+        self.assertEqual(
+            NODES.expand_filename_prefix("Anima/%date:yyyy-MM-dd%/upscale/ComfyUI", when),
+            "Anima/2026-08-30/upscale/ComfyUI",
+        )
+        self.assertEqual(
+            NODES.expand_filename_prefix("%date:yyyy-MM-dd%_%date:hhmmss%", when),
+            "2026-08-30_105407",
+        )
+        self.assertEqual(NODES.expand_filename_prefix("bokujuu_webp/example", when), "bokujuu_webp/example")
+
+    def test_saves_into_dated_subfolder_from_prefix_tokens(self):
+        prompt = {"1": {"class_type": "EmptyImage", "inputs": {"width": 64, "height": 64}}}
+        image = torch.rand((1, 64, 64, 3), generator=torch.Generator().manual_seed(7))
+        NODES.BokujuuSaveWebP.hidden = SimpleNamespace(prompt=prompt, extra_pnginfo=None)
+        when = datetime(2026, 8, 30, 10, 54, 7)
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            with patch.object(NODES.folder_paths, "get_output_directory", return_value=output_dir):
+                with patch.object(NODES, "datetime") as datetime_module:
+                    datetime_module.now.return_value = when
+                    NODES.BokujuuSaveWebP.execute(
+                        image,
+                        "Anima/%date:yyyy-MM-dd%/%width%x%height%/ComfyUI",
+                        80,
+                        4,
+                    )
+
+            files = list((Path(output_dir) / "Anima" / "2026-08-30" / "64x64").glob("ComfyUI_*.webp"))
+            self.assertEqual(len(files), 1)
+
+    def test_frontend_hooks_filename_prefix_serialization(self):
+        source = (MODULE_PATH.parent / "web" / "save_webp.js").read_text(encoding="utf-8")
+        self.assertIn("BokujuuSaveWebP", source)
+        self.assertIn("applyTextReplacements", source)
+        self.assertIn("filename_prefix", source)
+        self.assertIn("serializeValue", source)
 
 
 if __name__ == "__main__":

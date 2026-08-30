@@ -2,6 +2,8 @@ import json
 import math
 import os
 import random
+import re
+from datetime import datetime
 
 import folder_paths
 import torch
@@ -540,6 +542,44 @@ class BokujuuDepthAnything3(io.ComfyNode):
         return io.NodeOutput(apply_color_theme(grey, color_theme).float())
 
 
+_DATE_PLACEHOLDER_RE = re.compile(r"%date:([^%]+)%")
+_DATE_FORMAT_RE = re.compile(r"dd?|MM?|hh?|mm?|ss?|yyy?y?")
+
+
+def format_comfy_date(pattern, when):
+    parts = {
+        "d": when.day,
+        "M": when.month,
+        "h": when.hour,
+        "m": when.minute,
+        "s": when.second,
+    }
+
+    def replace(match):
+        token = match.group(0)
+        if token == "yy":
+            return str(when.year)[2:]
+        if token == "yyyy":
+            return str(when.year)
+        key = token[0]
+        if key in parts:
+            return str(parts[key]).zfill(len(token))
+        return token
+
+    return _DATE_FORMAT_RE.sub(replace, pattern)
+
+
+def expand_filename_prefix(filename_prefix, when=None):
+    if "%" not in filename_prefix:
+        return filename_prefix
+    if when is None:
+        when = datetime.now()
+    return _DATE_PLACEHOLDER_RE.sub(
+        lambda match: format_comfy_date(match.group(1), when),
+        filename_prefix,
+    )
+
+
 class BokujuuSaveWebP(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -550,7 +590,11 @@ class BokujuuSaveWebP(io.ComfyNode):
             description="Saves each image as lossy WebP with embedded ComfyUI prompt and workflow metadata.",
             inputs=[
                 io.Image.Input("images"),
-                io.String.Input("filename_prefix", default="ComfyUI"),
+                io.String.Input(
+                    "filename_prefix",
+                    default="ComfyUI",
+                    tooltip="The prefix for the file to save. This may include formatting information such as %date:yyyy-MM-dd% or %Empty Latent Image.width% to include values from nodes.",
+                ),
                 io.Int.Input("quality", default=85, min=1, max=100),
                 io.Int.Input("method", default=4, min=0, max=6, advanced=True),
             ],
@@ -561,6 +605,7 @@ class BokujuuSaveWebP(io.ComfyNode):
 
     @classmethod
     def execute(cls, images, filename_prefix, quality, method):
+        filename_prefix = expand_filename_prefix(filename_prefix)
         full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
             filename_prefix,
             folder_paths.get_output_directory(),

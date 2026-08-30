@@ -74,6 +74,7 @@ Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable examp
 
 - `quality` controls lossy WebP quality from 1 to 100. The default is 85.
 - `method` controls the WebP encoder effort from 0 (fastest) to 6 (slowest). The default is 4.
+- `filename_prefix` accepts the same tokens as ComfyUI's Save Image node, including `%date:yyyy-MM-dd%` and `%Empty Latent Image.width%`.
 - Lossless mode is intentionally not exposed.
 - ComfyUI's `--disable-metadata` option is respected.
 
