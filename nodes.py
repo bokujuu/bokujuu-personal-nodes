@@ -9,7 +9,7 @@ import comfy.sd
 import comfy.utils
 from comfy.ldm.colormap import turbo
 from comfy_extras.nodes_depth_anything_3 import DA3Inference, DA3ModelType, DA3Render
-from comfy_api.latest import ComfyExtension, io
+from comfy_api.latest import ComfyExtension, io, ui
 from huggingface_hub import hf_hub_download
 from typing_extensions import override
 
@@ -540,6 +540,52 @@ class BokujuuDepthAnything3(io.ComfyNode):
         return io.NodeOutput(apply_color_theme(grey, color_theme).float())
 
 
+class BokujuuSaveWebP(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuSaveWebP",
+            display_name="Bokujuu Save WebP",
+            category="Bokujuu/Image",
+            description="Saves each image as lossy WebP with embedded ComfyUI prompt and workflow metadata.",
+            inputs=[
+                io.Image.Input("images"),
+                io.String.Input("filename_prefix", default="ComfyUI"),
+                io.Int.Input("quality", default=85, min=1, max=100),
+                io.Int.Input("method", default=4, min=0, max=6, advanced=True),
+            ],
+            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
+            is_output_node=True,
+            outputs=[io.Image.Output(display_name="images")],
+        )
+
+    @classmethod
+    def execute(cls, images, filename_prefix, quality, method):
+        full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+            filename_prefix,
+            folder_paths.get_output_directory(),
+            images[0].shape[1],
+            images[0].shape[0],
+        )
+        results = []
+        for batch_number, image in enumerate(images):
+            pil_image = ui.ImageSaveHelper._convert_tensor_to_pil(image)
+            exif = ui.ImageSaveHelper._create_webp_metadata(pil_image, cls)
+            filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
+            file = f"{filename_with_batch_num}_{counter:05}_.webp"
+            pil_image.save(
+                os.path.join(full_output_folder, file),
+                format="WEBP",
+                lossless=False,
+                quality=quality,
+                method=method,
+                exif=exif,
+            )
+            results.append(ui.SavedResult(file, subfolder, io.FolderType.output))
+            counter += 1
+        return io.NodeOutput(images, ui=ui.SavedImages(results))
+
+
 class BokujuuPersonalNodes(ComfyExtension):
     @override
     async def get_node_list(self):
@@ -549,4 +595,5 @@ class BokujuuPersonalNodes(ComfyExtension):
             BokujuuPersonalLora,
             BokujuuLoadDepthAnything3,
             BokujuuDepthAnything3,
+            BokujuuSaveWebP,
         ]

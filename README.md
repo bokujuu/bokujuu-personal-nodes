@@ -68,6 +68,17 @@ Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable examp
 
 `Personal-LoRA` builds the same `LORA_STACK` format without randomization. Choose one or more LoRAs with the searchable `Select LoRAs` dialog, then set fixed `model_strength` and `clip_strength` values for every selected LoRA. An incoming `LORA_STACK` is preserved and merged by LoRA name, so the node can be placed between stack-producing nodes inside a subgraph.
 
+## Bokujuu Save WebP
+
+`Bokujuu Save WebP` saves each input image as a lossy WebP while embedding the same prompt and workflow metadata format used by ComfyUI's built-in WebP saver. Saved files can be viewed as ordinary images and loaded back into ComfyUI to restore their workflow.
+
+- `quality` controls lossy WebP quality from 1 to 100. The default is 85.
+- `method` controls the WebP encoder effort from 0 (fastest) to 6 (slowest). The default is 4.
+- Lossless mode is intentionally not exposed.
+- ComfyUI's `--disable-metadata` option is respected.
+
+The editable example is `workflows/webp_save_example.json`. It saves ComfyUI's bundled `input/example.png` under `output/bokujuu_webp/`.
+
 ## Installation
 
 ```powershell
