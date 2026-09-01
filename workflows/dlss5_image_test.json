@@ -1,0 +1,72 @@
+{
+  "id": "bokujuu-dlss5-image-test",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [20, 20],
+      "size": [300, 330],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {"name": "image", "type": "COMBO", "widget": {"name": "image"}, "link": null},
+        {"name": "upload", "type": "IMAGEUPLOAD", "widget": {"name": "upload"}, "link": null}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [1]},
+        {"name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {"Node name for S&R": "LoadImage", "cnr_id": "comfy-core"},
+      "widgets_values": ["example.png", "image"]
+    },
+    {
+      "id": 2,
+      "type": "BokujuuDLSS5NeuralUpscale",
+      "pos": [380, 80],
+      "size": [380, 220],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 1},
+        {"name": "scale", "type": "FLOAT", "widget": {"name": "scale"}, "link": null},
+        {"name": "quality", "type": "COMBO", "widget": {"name": "quality"}, "link": null},
+        {"name": "cas_amount", "type": "FLOAT", "widget": {"name": "cas_amount"}, "link": null},
+        {"name": "output_mix", "type": "FLOAT", "widget": {"name": "output_mix"}, "link": null},
+        {"name": "gpu_index", "type": "INT", "widget": {"name": "gpu_index"}, "link": null}
+      ],
+      "outputs": [
+        {"name": "upscaled_images", "type": "IMAGE", "links": [2]}
+      ],
+      "properties": {"Node name for S&R": "BokujuuDLSS5NeuralUpscale"},
+      "widgets_values": [2.0, "balanced", 0.7, 1.0, 0]
+    },
+    {
+      "id": 3,
+      "type": "SaveImage",
+      "pos": [820, 80],
+      "size": [320, 360],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 2}
+      ],
+      "outputs": [],
+      "properties": {"Node name for S&R": "SaveImage", "cnr_id": "comfy-core"},
+      "widgets_values": ["bokujuu_dlss5/image_2x"]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "IMAGE"],
+    [2, 2, 0, 3, 0, "IMAGE"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {"workflowRendererVersion": "LG"},
+  "version": 0.4
+}

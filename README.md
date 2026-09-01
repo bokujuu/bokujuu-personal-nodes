@@ -57,6 +57,62 @@ The editable test workflow is `workflows/da3_large_1.1_test.json`. It uses Comfy
 - This node currently uses the monocular inference path and returns one relative-depth image for each input image. Camera poses, metric depth, meshes, and point clouds are intentionally outside its scope.
 - Review and follow the license published with the upstream [`depth-anything/DA3-LARGE-1.1`](https://huggingface.co/depth-anything/DA3-LARGE-1.1) model before distribution or commercial use.
 
+## Experimental DLSS 5 / DLSS Super Resolution
+
+Three nodes expose an experimental NVIDIA DLSS Super Resolution path for generated images and ordinary video frames:
+
+- `Bokujuu DLSS Guidance Depth (DA3)` estimates a normalized DA3 relative-depth tensor and a colorized preview. The upscale nodes do not consume this; they keep an internal constant depth of 0.5.
+- `Bokujuu DLSS 5 Neural Upscale` applies true DLSS Super Resolution to independent images or an IMAGE batch. Each image resets DLSS history. The default is Balanced plus CAS 0.7.
+- `Bokujuu DLSS 5 Temporal Upscale` reuses one DLSS feature session for an IMAGE sequence, retaining history until a scene cut is detected. It uses the same still-image defaults.
+
+The implementation calls the public DLSS-SR `SuperSampling` feature with different input and output dimensions. It does not call same-resolution Feature 18 Neural Rendering and does not pre-resize with Lanczos while labeling that resize as DLSS.
+
+### Runtime setup
+
+This repository does not include NVIDIA SDK headers or proprietary runtime DLLs.
+
+1. Obtain the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS) and review its license.
+2. Copy a compatible production `nvngx_dlss.dll` to `ComfyUI/models/dlss5/nvngx_dlss.dll`.
+3. Build the project-owned bridge locally:
+
+```powershell
+cd D:\ComfyUI_20260315\custom_nodes\bokujuu-personal-nodes
+.\native\build_bridge.ps1 -SdkPath C:\path\to\NVIDIA-DLSS
+```
+
+The generated `native/bin/bokujuu_dlss_sr_bridge.dll` is ignored by git. Missing bridge/runtime errors are deferred until a DLSS node executes, so other Bokujuu nodes continue to load normally.
+
+### Usage and limitations
+
+Connect an IMAGE to `Bokujuu DLSS 5 Neural Upscale`. Depth mode is not exposed; the node always supplies a constant normalized depth of 0.5 internally.
+
+- `quality` is ordered from fastest/lowest quality to slowest/highest quality: Ultra Performance, Performance, Balanced (default), Quality, Ultra Quality, DLAA. DLAA is 1.0x only. Ultra Quality was rejected at 2.0x on this runtime. On a reset still frame, Ultra Performance through Quality produced byte-identical RGB.
+- `cas_amount` is a spatial post-filter after DLSS-SR, not a DLSS quality mode. Default is 0.7. `0` disables it. Values above 1.0 are experimental.
+- `scale` accepts 1.0x through 3.0x.
+- `output_mix` blends DLSS output with an independently generated Lanczos target-resolution baseline.
+- RGBA alpha bypasses DLSS and is resized separately before recombination.
+- SDR/sRGB input in `[0,1]` is assumed. HDR, frame generation, reactive masks, optical flow, and engine motion-vector inputs are outside this implementation.
+- Ordinary video has no accurate engine motion vectors or sub-pixel jitter. The temporal node sends zero motion vectors and can therefore ghost on motion; it is not equivalent to in-game DLSS integration.
+- These nodes and their bridge are unofficial and experimental. A compatible NVIDIA RTX GPU, current driver, and user-supplied NVIDIA runtime are required.
+
+The editable still-image example is `workflows/dlss5_image_test.json`. It uses ComfyUI's bundled `input/example.png` and writes under `output/bokujuu_dlss5/`. A DA3 depth-preview graph is `workflows/dlss5_depth_test.json`. API graphs are `workflows/dlss5_image_test_api.json`, `workflows/dlss5_depth_test_api.json`, and `workflows/dlss5_temporal_test_api.json`. The temporal graph expects [Video Helper Suite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite). Investigation details and measured results are in `docs/dlss5-investigation.md`.
+
+For local comparisons:
+
+```powershell
+D:\ComfyUI_20260315\.venv\Scripts\python.exe scripts\run_dlss5_comparison.py --input C:\path\to\image.png
+D:\ComfyUI_20260315\.venv\Scripts\python.exe scripts\run_dlss5_temporal_smoke.py --input C:\path\to\video.mp4 --output-dir D:\ComfyUI_20260315\output\bokujuu_dlss5_test\video
+```
+
+The comparison script tests Lanczos and the installed RTX Video Super Resolution custom-node backend. It also tests an installed ESRGAN-compatible model when one exists under `ComfyUI/models/upscale_models/`.
+
+Quality against CAS amount:
+
+```powershell
+D:\ComfyUI_20260315\.venv\Scripts\python.exe scripts\run_dlss5_quality_cas_matrix.py --input C:\path\to\image.png --output-dir D:\ComfyUI_20260315\output\bokujuu_dlss5_test\quality_cas
+D:\ComfyUI_20260315\.venv\Scripts\python.exe scripts\emit_dlss5_split_compare.py --left C:\path\to\left.png --right C:\path\to\right.png --output-dir D:\ComfyUI_20260315\output\bokujuu_dlss5_test\split
+```
+
 ## Bokujuu LoRA Weight Randomizer
 
 Assigns reproducible random weights to every selected LoRA and returns an EasyUse-compatible `LORA_STACK`.
@@ -128,6 +184,13 @@ Restart ComfyUI after installation.
 
 ```powershell
 python -m unittest discover -s tests -v
+```
+
+Run the native DLSS integration test explicitly on a configured RTX machine:
+
+```powershell
+$env:BOKUJUU_RUN_DLSS_INTEGRATION="1"
+D:\ComfyUI_20260315\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 ## License
