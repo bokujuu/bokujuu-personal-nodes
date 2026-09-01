@@ -2,6 +2,28 @@
 
 Personal [ComfyUI](https://github.com/Comfy-Org/ComfyUI) nodes maintained by bokujuu.
 
+## Bokujuu Anima Stream Loop
+
+`Bokujuu Anima Stream Loop` is the live Anima StreamDiffusion node. Independent frames sit at different sigma stages; each tick injects new noise, steps the mixed-timestep batch with Euler, and shows the latest completed Light TAE frame on the loop node. Queue the graph once and press Cancel to stop.
+
+The canonical graph is `workflows/anima_stream_loop.json`, with API graph `workflows/anima_stream_loop_api.json`. It uses `fnMomentAnimaTurbo_v40NoTurbo.safetensors` at 768×768, CFG 1, 4 steps, official `anima-turbo-lora-v0.2.safetensors`, `frames_per_tick=1`, and `TorchCompileModelAdvanced` with `dynamic=false`. Four-step Anima graphs always include that Turbo LoRA.
+
+- Images appear on the loop node as a single live preview. CLIP text is sent as you type; a prompt change updates conditioning on the next tick while in-flight slots keep their remaining steps.
+- `Empty Latent Image` supplies width and height. Its batch size is not the run length. Pipeline width is `frames_per_tick * steps`. The default `frames_per_tick=1` keeps 4 mixed-timestep latents in one static DiT forward at 4 steps.
+- Connect `CLIP` to pick up `CLIPTextEncode` edits while the loop is running.
+- Two steps on `BasicScheduler` is faster and softer. LCM is not compatible with Anima.
+- On first use the node downloads `lightx2v/Autoencoders/lighttaew2_1.safetensors` into `ComfyUI/models/vae_approx/` if that file is missing.
+
+## Bokujuu Anima Stream Batch Sampler
+
+`Bokujuu Anima Stream Batch Sampler` is the finite-batch variant of the same mixed-timestep Euler pipeline. Connect it to `SamplerCustomAdvanced` with `RandomNoise`, `BasicGuider`, and `BasicScheduler`.
+
+- `microbatch_size` limits the largest mixed-timestep forward without changing output order.
+- `frames_per_tick` injects that many new latents each stream tick.
+- `live_preview` decodes each completed frame with Light TAE and pushes it to every `Preview Image` node in the current prompt.
+- The batch sampler accepts a finite latent batch and supports txt2img only. Masks and img2img are outside that node.
+- Unit-test graphs: `workflows/anima_stream_baseline_test_api.json`, `workflows/anima_stream_batch_test_api.json`, and `workflows/anima_stream_realtime_test.json`.
+
 ## Bokujuu Depth Anything 3
 
 Two nodes provide a compact DA3-LARGE-1.1 image-to-depth workflow:
