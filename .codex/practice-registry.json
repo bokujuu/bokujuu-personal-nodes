@@ -53,6 +53,24 @@
       ],
       "skill_path": ".codex/skills/comfyui-frontend-controller",
       "status": "draft"
+    },
+    {
+      "slug": "comfyui-dlss-sr-custom-node",
+      "summary": "Implement an experimental ComfyUI DLSS Super Resolution node with a locally built bridge, user-supplied NVIDIA runtime, and DA3 relative-depth guidance.",
+      "trigger_keywords": [
+        "DLSS Super Resolution",
+        "DLSS 5 custom node"
+      ],
+      "verification_commands": [
+        "D:\\ComfyUI_20260315\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v",
+        "$env:BOKUJUU_RUN_DLSS_INTEGRATION=\\\"1\\\"; D:\\ComfyUI_20260315\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v"
+      ],
+      "source_urls": [
+        "https://github.com/NVIDIA/DLSS",
+        "https://github.com/NVIDIA-RTX/Streamline"
+      ],
+      "skill_path": ".codex/skills/comfyui-dlss-sr-custom-node",
+      "status": "draft"
     }
   ]
 }

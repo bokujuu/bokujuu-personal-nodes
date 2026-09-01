@@ -1,0 +1,5 @@
+interface:
+  display_name: "Comfyui Dlss Sr Custom Node"
+  short_description: "Follow the repo-local practice for Implement an experimental ComfyUI DLSS Super Resolution node with a locally built bridge, user-supplied NVIDIA runtime, and DA3 relative-depth guidance.."
+  default_prompt: "Use the local skill at .codex/skills/comfyui-dlss-sr-custom-node to follow the repository practice for Implement an experimental ComfyUI DLSS Super Resolution node with a locally built bridge, user-supplied NVIDIA runtime, and DA3 relative-depth guidance.."
+allow_implicit_invocation: false

@@ -1,0 +1,24 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "example.png"}
+  },
+  "3": {
+    "class_type": "BokujuuDLSS5NeuralUpscale",
+    "inputs": {
+      "images": ["1", 0],
+      "scale": 2.0,
+      "quality": "balanced",
+      "cas_amount": 0.7,
+      "output_mix": 1.0,
+      "gpu_index": 0
+    }
+  },
+  "4": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "bokujuu_dlss5/image_2x",
+      "images": ["3", 0]
+    }
+  }
+}
