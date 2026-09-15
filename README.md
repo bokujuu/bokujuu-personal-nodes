@@ -184,6 +184,8 @@ For Impact Pack, use `ImpactWildcardEncode.populated_text`. For EasyUse, use `ea
 
 The GUI workflow remains embedded in the WebP as before. It is not duplicated in the companion JSON, keeping JSON-only negative-example records smaller.
 
+The full editable example is `workflows/anima_ga_F4_webp_json.json`. It connects the final TIPO positive prompt, negative prompt, and final merged LoRA stack to the companion JSON saver while leaving the generation, LoRA, and upscale paths unchanged. The workflow expects the same third-party nodes and local models referenced by the graph.
+
 ## Bokujuu Seed Control
 
 `Bokujuu Seed Control` is a frontend controller for seed widgets in the main workflow and every nested subgraph. It detects nodes that use ComfyUI's `control_after_generate` setting and lets each one remain unchanged, keep its current value fixed, or randomize after every run.

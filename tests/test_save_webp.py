@@ -196,6 +196,28 @@ class SaveWebPTests(unittest.TestCase):
         self.assertIn("filename_prefix", source)
         self.assertIn("serializeValue", source)
 
+    def test_full_workflow_uses_direct_json_saver_connections(self):
+        workflow = json.loads(
+            (MODULE_PATH.parent / "workflows" / "anima_ga_F4_webp_json.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        all_nodes = list(workflow["nodes"])
+        for subgraph in workflow.get("definitions", {}).get("subgraphs", []):
+            all_nodes.extend(subgraph.get("nodes", []))
+
+        self.assertNotIn("BokujuuAuditRecord", {node.get("type") for node in all_nodes})
+        saver = next(
+            node
+            for node in workflow["nodes"]
+            if node.get("type") == "BokujuuSaveWebPWithJSON"
+        )
+        self.assertEqual(
+            [node_input.get("name") for node_input in saver["inputs"]],
+            ["images", "positive_prompt", "negative_prompt", "lora_stack"],
+        )
+        self.assertTrue(all(node_input.get("link") is not None for node_input in saver["inputs"]))
+
 
 if __name__ == "__main__":
     unittest.main()
