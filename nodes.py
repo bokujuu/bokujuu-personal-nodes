@@ -541,6 +541,194 @@ def expand_filename_prefix(filename_prefix, when=None):
     )
 
 
+def _is_prompt_link(value, node_ids):
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and str(value[0]) in node_ids
+        and isinstance(value[1], int)
+        and not isinstance(value[1], bool)
+    )
+
+
+def _execution_parameter_index(prompt):
+    if not isinstance(prompt, dict):
+        return {"seeds": [], "nodes": []}
+
+    node_ids = {str(node_id) for node_id in prompt}
+    seeds = []
+    nodes = []
+    for node_id, node in prompt.items():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        literal_inputs = {}
+        if isinstance(inputs, dict):
+            for name, value in inputs.items():
+                if _is_prompt_link(value, node_ids):
+                    continue
+                literal_inputs[name] = value
+                if (
+                    "seed" in name.lower()
+                    and isinstance(value, int)
+                    and not isinstance(value, bool)
+                ):
+                    seeds.append(
+                        {
+                            "node_id": str(node_id),
+                            "class_type": node.get("class_type"),
+                            "input": name,
+                            "value": value,
+                        }
+                    )
+
+        meta = node.get("_meta")
+        nodes.append(
+            {
+                "node_id": str(node_id),
+                "class_type": node.get("class_type"),
+                "title": meta.get("title") if isinstance(meta, dict) else None,
+                "inputs": literal_inputs,
+            }
+        )
+    return {"seeds": seeds, "nodes": nodes}
+
+
+def _wildcard_expansions(prompt):
+    if not isinstance(prompt, dict):
+        return []
+
+    expansions = []
+    for node_id, node in prompt.items():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict) or not isinstance(inputs.get("populated_text"), str):
+            continue
+        meta = node.get("_meta")
+        expansions.append(
+            {
+                "node_id": str(node_id),
+                "class_type": node.get("class_type"),
+                "title": meta.get("title") if isinstance(meta, dict) else None,
+                "source_text": inputs.get("wildcard_text", inputs.get("text")),
+                "populated_text": inputs["populated_text"],
+            }
+        )
+    return expansions
+
+
+def _serialize_lora_stack(lora_stack):
+    serialized = []
+    for row in lora_stack or []:
+        if isinstance(row, dict):
+            name = row.get("lora_name", row.get("name"))
+            model_strength = row.get("model_strength", row.get("strength_model"))
+            clip_strength = row.get("clip_strength", row.get("strength_clip", model_strength))
+        elif isinstance(row, (list, tuple)) and len(row) >= 2:
+            name = row[0]
+            model_strength = row[1]
+            clip_strength = row[2] if len(row) > 2 else model_strength
+        else:
+            serialized.append({"raw": str(row)})
+            continue
+
+        serialized.append(
+            {
+                "name": name,
+                "model_strength": float(model_strength) if model_strength is not None else None,
+                "clip_strength": float(clip_strength) if clip_strength is not None else None,
+            }
+        )
+    return serialized
+
+
+_PROMPT_LORA_RE = re.compile(r"<lora:([^>]+)>", re.IGNORECASE)
+
+
+def _prompt_lora_tags(texts):
+    tags = []
+    for source, text in texts:
+        if not isinstance(text, str):
+            continue
+        for match in _PROMPT_LORA_RE.finditer(text):
+            raw = match.group(0)
+            parts = match.group(1).strip(":").split(":")
+            numeric = []
+            for value in parts[1:]:
+                try:
+                    numeric.append(float(value))
+                except ValueError:
+                    continue
+            tags.append(
+                {
+                    "source": source,
+                    "raw": raw,
+                    "name": parts[0] if parts else None,
+                    "model_strength": numeric[0] if numeric else None,
+                    "clip_strength": numeric[1] if len(numeric) > 1 else None,
+                }
+            )
+    return tags
+
+
+def build_generation_audit(
+    image_file,
+    image,
+    batch_number,
+    quality,
+    method,
+    prompt=None,
+    positive_prompt=None,
+    negative_prompt=None,
+    lora_stack=None,
+):
+    wildcard_expansions = _wildcard_expansions(prompt)
+    prompt_texts = [
+        ("positive_prompt", positive_prompt),
+        ("negative_prompt", negative_prompt),
+    ]
+    prompt_texts.extend(
+        (f"node:{entry['node_id']}:populated_text", entry["populated_text"])
+        for entry in wildcard_expansions
+    )
+    return {
+        "schema": "bokujuu_generation_audit",
+        "schema_version": 1,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "image": {
+            "filename": image_file,
+            "batch_index": batch_number,
+            "width": int(image.shape[1]),
+            "height": int(image.shape[0]),
+            "format": "webp",
+            "quality": quality,
+            "method": method,
+        },
+        "resolved": {
+            "positive_prompt": positive_prompt,
+            "negative_prompt": negative_prompt,
+            "wildcard_expansions": wildcard_expansions,
+            "loras": _serialize_lora_stack(lora_stack),
+            "prompt_lora_tags": _prompt_lora_tags(prompt_texts),
+        },
+        "parameters": _execution_parameter_index(prompt),
+        "execution_graph": prompt,
+    }
+
+
+def _write_json_atomic(path, value):
+    temporary_path = path + ".tmp"
+    try:
+        with open(temporary_path, "w", encoding="utf-8", newline="\n") as file_handle:
+            json.dump(value, file_handle, ensure_ascii=False, indent=2)
+            file_handle.write("\n")
+        os.replace(temporary_path, path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.remove(temporary_path)
+
+
 class BokujuuSaveWebP(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -592,6 +780,97 @@ class BokujuuSaveWebP(io.ComfyNode):
         return io.NodeOutput(images, ui=ui.SavedImages(results))
 
 
+class BokujuuSaveWebPWithJSON(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuSaveWebPWithJSON",
+            display_name="Bokujuu Save WebP + JSON",
+            category="Bokujuu/Image",
+            description="Saves a lossy WebP and same-name JSON audit record for every image.",
+            inputs=[
+                io.Image.Input("images"),
+                io.String.Input(
+                    "filename_prefix",
+                    default="ComfyUI",
+                    tooltip="The prefix for both files. Supports %date:yyyy-MM-dd% and node value replacements.",
+                ),
+                io.Int.Input("quality", default=85, min=1, max=100),
+                io.Int.Input("method", default=4, min=0, max=6, advanced=True),
+                io.String.Input(
+                    "positive_prompt",
+                    optional=True,
+                    force_input=True,
+                    tooltip="Connect the final populated/processed positive prompt to record the exact wildcard result.",
+                ),
+                io.String.Input(
+                    "negative_prompt",
+                    optional=True,
+                    force_input=True,
+                    tooltip="Connect the final populated/processed negative prompt when one is used.",
+                ),
+                io.Custom("LORA_STACK").Input(
+                    "lora_stack",
+                    optional=True,
+                    tooltip="Connect the same LORA_STACK sent to the loader to record exact names and strengths.",
+                ),
+            ],
+            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
+            is_output_node=True,
+            outputs=[io.Image.Output(display_name="images")],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        images,
+        filename_prefix,
+        quality,
+        method,
+        positive_prompt=None,
+        negative_prompt=None,
+        lora_stack=None,
+    ):
+        filename_prefix = expand_filename_prefix(filename_prefix)
+        full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+            filename_prefix,
+            folder_paths.get_output_directory(),
+            images[0].shape[1],
+            images[0].shape[0],
+        )
+        prompt = getattr(getattr(cls, "hidden", None), "prompt", None)
+        results = []
+        for batch_number, image in enumerate(images):
+            pil_image = ui.ImageSaveHelper._convert_tensor_to_pil(image)
+            exif = ui.ImageSaveHelper._create_webp_metadata(pil_image, cls)
+            filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
+            image_file = f"{filename_with_batch_num}_{counter:05}_.webp"
+            image_path = os.path.join(full_output_folder, image_file)
+            pil_image.save(
+                image_path,
+                format="WEBP",
+                lossless=False,
+                quality=quality,
+                method=method,
+                exif=exif,
+            )
+            audit = build_generation_audit(
+                image_file,
+                image,
+                batch_number,
+                quality,
+                method,
+                prompt=prompt,
+                positive_prompt=positive_prompt,
+                negative_prompt=negative_prompt,
+                lora_stack=lora_stack,
+            )
+            _write_json_atomic(os.path.splitext(image_path)[0] + ".json", audit)
+            results.append(ui.SavedResult(image_file, subfolder, io.FolderType.output))
+            counter += 1
+        return io.NodeOutput(images, ui=ui.SavedImages(results))
+
+
 class BokujuuSeedControl(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -619,5 +898,6 @@ class BokujuuPersonalNodes(ComfyExtension):
             BokujuuLoadDepthAnything3,
             BokujuuDepthAnything3,
             BokujuuSaveWebP,
+            BokujuuSaveWebPWithJSON,
             BokujuuSeedControl,
         ]

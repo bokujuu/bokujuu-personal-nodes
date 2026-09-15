@@ -158,6 +158,32 @@ Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable examp
 
 The editable example is `workflows/webp_save_example.json`. It saves ComfyUI's bundled `input/example.png` under `output/bokujuu_webp/`.
 
+## Bokujuu Save WebP + JSON
+
+`Bokujuu Save WebP + JSON` saves the same lossy WebP plus a UTF-8 companion JSON file with the same basename. Keep accepted WebP/JSON pairs and delete only rejected WebP images; the remaining JSON-only files can then be analyzed as negative generation examples.
+
+### Connections
+
+Connect the same final values that are used by the generation workflow. No additional recorder chain is required.
+
+| Input | Connect from | JSON field |
+| --- | --- | --- |
+| `images` | Final image output | `image` metadata and the WebP file |
+| `positive_prompt` | Final expanded prompt sent to the positive CLIP encoder | `resolved.positive_prompt` |
+| `negative_prompt` | Final text sent to the negative CLIP encoder | `resolved.negative_prompt` |
+| `lora_stack` | The final `LORA_STACK` sent to the LoRA loader | `resolved.loras` |
+
+For Impact Pack, use `ImpactWildcardEncode.populated_text`. For EasyUse, use `easy wildcards.populated_text`. If Danbot or TIPO expands the prompt afterward, connect that final expanded string instead. These connections only copy the resolved values into JSON; they do not modify the prompt, LoRA stack, or image sent through the original generation path.
+
+### Recorded data
+
+- `resolved` contains the final positive and negative prompts, exact LoRA filenames, model strengths, CLIP strengths, and LoRA tags found in the prompt text.
+- `parameters` provides a compact index of submitted seeds and literal node inputs.
+- `execution_graph` preserves the complete submitted API graph for later inspection.
+- `image` records the filename, batch index, dimensions, WebP quality, and encoder method.
+
+The GUI workflow remains embedded in the WebP as before. It is not duplicated in the companion JSON, keeping JSON-only negative-example records smaller.
+
 ## Bokujuu Seed Control
 
 `Bokujuu Seed Control` is a frontend controller for seed widgets in the main workflow and every nested subgraph. It detects nodes that use ComfyUI's `control_after_generate` setting and lets each one remain unchanged, keep its current value fixed, or randomize after every run.
