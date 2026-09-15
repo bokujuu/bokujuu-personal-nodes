@@ -4,7 +4,7 @@ import { applyTextReplacements } from "../../scripts/utils.js";
 app.registerExtension({
     name: "Bokujuu.SaveWebP.FilenamePrefix",
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== "BokujuuSaveWebP") {
+        if (!["BokujuuSaveWebP", "BokujuuSaveWebPWithJSON"].includes(nodeData.name)) {
             return;
         }
 

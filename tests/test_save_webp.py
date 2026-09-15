@@ -26,6 +26,7 @@ class SaveWebPTests(unittest.TestCase):
     def test_node_is_registered_as_lossy_webp_output(self):
         registered = asyncio.run(NODES.BokujuuPersonalNodes().get_node_list())
         self.assertIn(NODES.BokujuuSaveWebP, registered)
+        self.assertIn(NODES.BokujuuSaveWebPWithJSON, registered)
 
         schema = NODES.BokujuuSaveWebP.define_schema()
         self.assertTrue(schema.is_output_node)
@@ -34,6 +35,14 @@ class SaveWebPTests(unittest.TestCase):
         prefix = next(node_input for node_input in schema.inputs if node_input.id == "filename_prefix")
         self.assertIn("%date:yyyy-MM-dd%", prefix.tooltip)
         self.assertIn("%Empty Latent Image.width%", prefix.tooltip)
+
+        audit_schema = NODES.BokujuuSaveWebPWithJSON.define_schema()
+        self.assertTrue(audit_schema.is_output_node)
+        audit_inputs = {node_input.id: node_input for node_input in audit_schema.inputs}
+        self.assertTrue(audit_inputs["positive_prompt"].optional)
+        self.assertTrue(audit_inputs["positive_prompt"].force_input)
+        self.assertTrue(audit_inputs["negative_prompt"].optional)
+        self.assertTrue(audit_inputs["lora_stack"].optional)
 
     def test_saves_lossy_webp_with_prompt_and_workflow(self):
         prompt = {"1": {"class_type": "EmptyImage", "inputs": {"width": 64, "height": 64}}}
@@ -93,9 +102,96 @@ class SaveWebPTests(unittest.TestCase):
             files = list((Path(output_dir) / "Anima" / "2026-08-30" / "64x64").glob("ComfyUI_*.webp"))
             self.assertEqual(len(files), 1)
 
+    def test_saves_same_basename_json_with_resolved_runtime_values(self):
+        prompt = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model.safetensors"}},
+            "4": {
+                "class_type": "ImpactWildcardEncode",
+                "inputs": {
+                    "model": ["1", 0],
+                    "wildcard_text": "portrait, __hair__",
+                    "populated_text": "portrait, silver hair, <lora:detail:0.65:0.4>",
+                    "mode": "populate",
+                },
+                "_meta": {"title": "Positive wildcard"},
+            },
+            "5": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "model": ["1", 0],
+                    "seed": 987654321,
+                    "steps": 24,
+                    "cfg": 5.5,
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                },
+            },
+        }
+        positive = "portrait, silver hair, <lora:detail:0.65:0.4>"
+        negative = "low quality"
+        lora_stack = [
+            ["style.safetensors", 0.72, 0.5],
+            ["detail.safetensors", -0.15, -0.1],
+        ]
+        image = torch.rand((1, 32, 48, 3), generator=torch.Generator().manual_seed(11))
+        NODES.BokujuuSaveWebPWithJSON.hidden = SimpleNamespace(
+            prompt=prompt,
+            extra_pnginfo={"workflow": {"nodes": []}},
+        )
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            with patch.object(NODES.folder_paths, "get_output_directory", return_value=output_dir):
+                result = NODES.BokujuuSaveWebPWithJSON.execute(
+                    image,
+                    "audit/test",
+                    82,
+                    5,
+                    positive_prompt=positive,
+                    negative_prompt=negative,
+                    lora_stack=lora_stack,
+                )
+
+            webp_files = list((Path(output_dir) / "audit").glob("*.webp"))
+            json_files = list((Path(output_dir) / "audit").glob("*.json"))
+            self.assertEqual(len(webp_files), 1)
+            self.assertEqual(len(json_files), 1)
+            self.assertEqual(webp_files[0].stem, json_files[0].stem)
+            self.assertIs(result[0], image)
+
+            audit = json.loads(json_files[0].read_text(encoding="utf-8"))
+            self.assertEqual(audit["schema"], "bokujuu_generation_audit")
+            self.assertEqual(audit["schema_version"], 1)
+            self.assertEqual(audit["image"]["filename"], webp_files[0].name)
+            self.assertEqual(audit["image"]["width"], 48)
+            self.assertEqual(audit["image"]["height"], 32)
+            self.assertEqual(audit["resolved"]["positive_prompt"], positive)
+            self.assertEqual(audit["resolved"]["negative_prompt"], negative)
+            self.assertEqual(
+                audit["resolved"]["loras"],
+                [
+                    {"name": "style.safetensors", "model_strength": 0.72, "clip_strength": 0.5},
+                    {"name": "detail.safetensors", "model_strength": -0.15, "clip_strength": -0.1},
+                ],
+            )
+            self.assertEqual(
+                audit["resolved"]["wildcard_expansions"][0]["populated_text"],
+                positive,
+            )
+            self.assertEqual(audit["resolved"]["prompt_lora_tags"][0]["name"], "detail")
+            self.assertEqual(
+                audit["parameters"]["seeds"],
+                [{"node_id": "5", "class_type": "KSampler", "input": "seed", "value": 987654321}],
+            )
+            sampler = next(node for node in audit["parameters"]["nodes"] if node["node_id"] == "5")
+            self.assertNotIn("model", sampler["inputs"])
+            self.assertEqual(sampler["inputs"]["cfg"], 5.5)
+            self.assertEqual(audit["execution_graph"], prompt)
+            self.assertNotIn("runtime_trace", audit)
+
     def test_frontend_hooks_filename_prefix_serialization(self):
         source = (MODULE_PATH.parent / "web" / "save_webp.js").read_text(encoding="utf-8")
         self.assertIn("BokujuuSaveWebP", source)
+        self.assertIn("BokujuuSaveWebPWithJSON", source)
         self.assertIn("applyTextReplacements", source)
         self.assertIn("filename_prefix", source)
         self.assertIn("serializeValue", source)
