@@ -142,6 +142,18 @@ If `minimum_strength` is greater than `maximum_strength`, every selected LoRA us
 
 Connect `lora_stack` to EasyUse's `easy loraStackApply` node. The editable example is `workflows/random_lora_selector_example.json`; replace its example LoRA pool with files installed in your own `models/loras` directory.
 
+## Bokujuu Danbot Random Choice
+
+`Bokujuu Danbot Random Choice` draws Danbot `rating` and `length` values that connect to Template Config combos.
+
+![Bokujuu Danbot Random Choice](docs/images/bokujuu-danbot-random-choice.png)
+
+- `auto` draws from the enabled choices using the rate sliders as relative weights. The rates do not need to sum to 100, and a rate of 0 is left out.
+- A specific dropdown value locks that side. For example, turn off Sensitive and Explicit, then set the General and Questionable rates to pick only between those two.
+- The outputs are concrete keys such as `general` and `very_short`. The node does not emit `auto`, which Danbot's pipeline rejects.
+- Connect one `rating` output to both Translation and Extension Template Config nodes when they should share a rating. Use a second copy of the node when the lengths should differ.
+- `choice` reports the selected pair. The same `seed` repeats the draw and does not change Python's global random state.
+
 ## Personal-LoRA
 
 `Personal-LoRA` builds the same `LORA_STACK` format without randomization. Choose one or more LoRAs with the searchable `Select LoRAs` dialog, then set fixed `model_strength` and `clip_strength` values for every selected LoRA. An incoming `LORA_STACK` is preserved and merged by LoRA name, so the node can be placed between stack-producing nodes inside a subgraph.

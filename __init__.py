@@ -6,6 +6,7 @@ from .dlss5.nodes import (
     BokujuuDLSS5TemporalUpscale,
     BokujuuDLSSGuidanceDepth,
 )
+from .danbot_choice import BokujuuDanbotRandomChoice
 from .stream_loop import BokujuuAnimaStreamLoop, register_live_prompt_route
 from .stream_nodes import BokujuuAnimaStreamBatchSampler
 
@@ -17,6 +18,7 @@ class BokujuuPersonalNodesExtension(ComfyExtension):
         nodes = await BokujuuPersonalNodes().get_node_list()
         return [
             *nodes,
+            BokujuuDanbotRandomChoice,
             BokujuuAnimaStreamBatchSampler,
             BokujuuAnimaStreamLoop,
             BokujuuDLSSGuidanceDepth,
