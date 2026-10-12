@@ -337,7 +337,7 @@ class BokujuuRandomLoraSelector(io.ComfyNode):
             category="Bokujuu/LoRA",
             description="Selects a seeded random count of LoRAs without replacement and assigns each a random strength.",
             inputs=[
-                io.Int.Input("selection_count", display_name="minimum_count", default=1, min=1, max=1000),
+                io.Int.Input("selection_count", display_name="minimum_count", default=1, min=0, max=1000),
                 io.Float.Input("minimum_strength", default=0.0, min=-10.0, max=10.0, step=0.01),
                 io.Float.Input("maximum_strength", default=1.0, min=-10.0, max=10.0, step=0.01),
                 io.Int.Input(
