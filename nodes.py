@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import os
@@ -6,12 +7,15 @@ import re
 from datetime import datetime
 
 import folder_paths
+import node_helpers
+import numpy as np
 import torch
 import comfy.sd
 import comfy.utils
 from comfy_extras.nodes_depth_anything_3 import DA3Inference, DA3ModelType, DA3Render
 from comfy_api.latest import ComfyExtension, io, ui
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from typing_extensions import override
 
 try:
@@ -23,6 +27,49 @@ except ImportError:  # Isolated unit-test import of nodes.py.
 DA3_REPO_ID = "depth-anything/DA3-LARGE-1.1"
 DA3_REPO_FILENAME = "model.safetensors"
 DA3_MODEL_FILENAME = "depth_anything_3_large_1.1.safetensors"
+IMAGE_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def resolve_image_directory(directory):
+    text = str(directory).strip().strip('"').strip("'")
+    if not text:
+        raise ValueError("directory is empty")
+    expanded = os.path.expanduser(text)
+    if not os.path.isabs(expanded):
+        raise ValueError(f"directory must be an absolute path, got {directory!r}")
+    path = os.path.abspath(expanded)
+    if not os.path.isdir(path):
+        raise ValueError(f"directory does not exist: {path}")
+    return path
+
+
+def list_image_files(directory):
+    root = resolve_image_directory(directory)
+    files = []
+    for name in os.listdir(root):
+        if not name.lower().endswith(IMAGE_FILE_EXTENSIONS):
+            continue
+        path = os.path.join(root, name)
+        if os.path.isfile(path):
+            files.append(path)
+    files.sort(key=lambda path: os.path.basename(path).lower())
+    if not files:
+        raise ValueError(f"No png, jpg, jpeg, or webp files in {root}")
+    return files
+
+
+def image_file_to_tensor(path):
+    source = node_helpers.pillow(Image.open, path)
+    try:
+        image = source.point(lambda value: value * (1 / 255)) if source.mode == "I" else source
+        rgb = image.convert("RGB")
+        array = np.array(rgb, dtype=np.float32, copy=True) / 255.0
+        return torch.from_numpy(array)[None,]
+    except Exception as exc:
+        raise ValueError(f"Could not load {path}: {exc}") from exc
+    finally:
+        source.close()
+
 
 def _geometry_model_path(filename=DA3_MODEL_FILENAME):
     return os.path.join(folder_paths.models_dir, "geometry_estimation", filename)
@@ -888,6 +935,51 @@ class BokujuuSeedControl(io.ComfyNode):
         return io.NodeOutput()
 
 
+class BokujuuLoadImagesFromPath(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="BokujuuLoadImagesFromPath",
+            display_name="Bokujuu Load Images From Path",
+            category="Bokujuu/Image",
+            search_aliases=["load folder", "absolute path", "load images from path"],
+            description="Loads every png, jpg, jpeg, and webp in an absolute folder path as an image list. Each image keeps its own size.",
+            inputs=[
+                io.String.Input(
+                    "directory",
+                    default="",
+                    tooltip="Absolute folder path. The images output is a list, so connect it to Start Loop in List mode.",
+                ),
+            ],
+            outputs=[
+                io.Image.Output(
+                    display_name="images",
+                    is_output_list=True,
+                    tooltip="One image per file, in case-insensitive filename order.",
+                ),
+            ],
+        )
+
+    @classmethod
+    def fingerprint_inputs(cls, directory):
+        try:
+            files = list_image_files(directory)
+        except Exception as exc:
+            return str(exc)
+        digest = hashlib.sha256()
+        for path in files:
+            stat = os.stat(path)
+            digest.update(os.path.basename(path).lower().encode("utf-8", "surrogateescape"))
+            digest.update(str(stat.st_mtime_ns).encode("ascii"))
+            digest.update(str(stat.st_size).encode("ascii"))
+        return digest.hexdigest()
+
+    @classmethod
+    def execute(cls, directory):
+        files = list_image_files(directory)
+        return io.NodeOutput([image_file_to_tensor(path) for path in files])
+
+
 class BokujuuPersonalNodes(ComfyExtension):
     @override
     async def get_node_list(self):
@@ -900,4 +992,5 @@ class BokujuuPersonalNodes(ComfyExtension):
             BokujuuSaveWebP,
             BokujuuSaveWebPWithJSON,
             BokujuuSeedControl,
+            BokujuuLoadImagesFromPath,
         ]
