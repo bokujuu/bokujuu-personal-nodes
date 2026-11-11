@@ -1,9 +1,12 @@
+import copy
 import hashlib
 import json
+import logging
 import math
 import os
 import random
 import re
+import uuid
 from datetime import datetime
 
 import folder_paths
@@ -56,6 +59,31 @@ def list_image_files(directory):
     if not files:
         raise ValueError(f"No png, jpg, jpeg, or webp files in {root}")
     return files
+
+
+def queue_next_folder_image(node_id, next_index):
+    if not node_id:
+        return False
+    import server
+
+    instance = getattr(server.PromptServer, "instance", None)
+    queue = getattr(instance, "prompt_queue", None) if instance is not None else None
+    running = getattr(queue, "currently_running", None) if queue is not None else None
+    if not running or len(running) != 1:
+        return False
+    value = next(iter(running.values()))
+    if len(value) < 5:
+        return False
+    prompt = copy.deepcopy(value[2])
+    node = prompt.get(str(node_id))
+    if not isinstance(node, dict) or node.get("class_type") != "BokujuuLoadImagesFromPath":
+        return False
+    node.setdefault("inputs", {})["index"] = next_index
+    sensitive = value[5] if len(value) > 5 else {}
+    number = -instance.number
+    instance.number += 1
+    queue.put((number, str(uuid.uuid4()), prompt, value[3], value[4], sensitive))
+    return True
 
 
 def image_file_to_tensor(path):
@@ -943,41 +971,71 @@ class BokujuuLoadImagesFromPath(io.ComfyNode):
             display_name="Bokujuu Load Images From Path",
             category="Bokujuu/Image",
             search_aliases=["load folder", "absolute path", "load images from path"],
-            description="Loads every png, jpg, jpeg, and webp in an absolute folder path as an image list. Each image keeps its own size.",
+            description="Loads png, jpg, jpeg, and webp from an absolute folder path. Queue mode runs one file per prompt and submits the next file itself.",
             inputs=[
                 io.String.Input(
                     "directory",
                     default="",
-                    tooltip="Absolute folder path. The images output is a list, so connect it to Start Loop in List mode.",
+                    tooltip="Absolute folder path. Each image keeps its own size.",
+                ),
+                io.Combo.Input(
+                    "mode",
+                    options=["queue", "list"],
+                    default="queue",
+                    tooltip="queue runs one image and queues the rest as separate prompts. list loads the whole folder at once for Start Loop; large folders exceed ComfyUI's graph limit.",
+                ),
+                io.Int.Input(
+                    "index",
+                    default=0,
+                    min=0,
+                    max=0xFFFFFFFFFFFFFFFF,
+                    advanced=True,
+                    tooltip="File offset for queue mode. Leave at 0. The node submits the following indexes itself.",
                 ),
             ],
+            hidden=[io.Hidden.unique_id],
             outputs=[
                 io.Image.Output(
                     display_name="images",
                     is_output_list=True,
-                    tooltip="One image per file, in case-insensitive filename order.",
+                    tooltip="Queue mode outputs the current file. List mode outputs every file, in case-insensitive filename order.",
                 ),
             ],
         )
 
     @classmethod
-    def fingerprint_inputs(cls, directory):
+    def fingerprint_inputs(cls, directory, mode="queue", index=0):
         try:
             files = list_image_files(directory)
         except Exception as exc:
             return str(exc)
-        digest = hashlib.sha256()
-        for path in files:
-            stat = os.stat(path)
-            digest.update(os.path.basename(path).lower().encode("utf-8", "surrogateescape"))
-            digest.update(str(stat.st_mtime_ns).encode("ascii"))
-            digest.update(str(stat.st_size).encode("ascii"))
-        return digest.hexdigest()
+        if mode == "list":
+            digest = hashlib.sha256()
+            for path in files:
+                stat = os.stat(path)
+                digest.update(os.path.basename(path).lower().encode("utf-8", "surrogateescape"))
+                digest.update(str(stat.st_mtime_ns).encode("ascii"))
+                digest.update(str(stat.st_size).encode("ascii"))
+            return digest.hexdigest()
+        if index < 0 or index >= len(files):
+            return f"index:{index}:{len(files)}"
+        path = files[index]
+        stat = os.stat(path)
+        return (index, path, stat.st_mtime_ns, stat.st_size)
 
     @classmethod
-    def execute(cls, directory):
+    def execute(cls, directory, mode="queue", index=0):
         files = list_image_files(directory)
-        return io.NodeOutput([image_file_to_tensor(path) for path in files])
+        if mode == "list":
+            return io.NodeOutput([image_file_to_tensor(path) for path in files])
+        if index < 0 or index >= len(files):
+            raise ValueError(f"index {index} is outside 0..{len(files) - 1} for {len(files)} images")
+        path = files[index]
+        logging.info("Bokujuu Load Images From Path: %s/%s %s", index + 1, len(files), os.path.basename(path))
+        if index + 1 < len(files):
+            node_id = getattr(getattr(cls, "hidden", None), "unique_id", None)
+            queue_next_folder_image(node_id, index + 1)
+        return io.NodeOutput([image_file_to_tensor(path)])
 
 
 class BokujuuPersonalNodes(ComfyExtension):

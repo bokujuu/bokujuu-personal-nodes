@@ -5,6 +5,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 from PIL import Image
@@ -27,7 +29,9 @@ class LoadImagesFromPathTests(unittest.TestCase):
         schema = NODES.BokujuuLoadImagesFromPath.define_schema()
         self.assertEqual(schema.node_id, "BokujuuLoadImagesFromPath")
         self.assertTrue(schema.outputs[0].is_output_list)
-        self.assertEqual(schema.inputs[0].id, "directory")
+        inputs = {node_input.id: node_input for node_input in schema.inputs}
+        self.assertEqual(inputs["mode"].default, "queue")
+        self.assertEqual(inputs["index"].default, 0)
 
     def test_loads_absolute_folder_as_native_size_list(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -38,7 +42,7 @@ class LoadImagesFromPathTests(unittest.TestCase):
             Image.new("RGB", (8, 8), (0, 0, 255)).save(root / "nested" / "c.png")
             (root / "notes.txt").write_text("skip", encoding="utf-8")
 
-            images = NODES.BokujuuLoadImagesFromPath.execute(f'"{root}"')[0]
+            images = NODES.BokujuuLoadImagesFromPath.execute(f'"{root}"', "list")[0]
 
             self.assertEqual(len(images), 2)
             self.assertEqual(tuple(images[0].shape), (1, 1, 4, 3))
@@ -63,9 +67,52 @@ class LoadImagesFromPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             Image.new("RGB", (2, 2), (1, 2, 3)).save(root / "a.png")
-            before = NODES.BokujuuLoadImagesFromPath.fingerprint_inputs(str(root))
+            before = NODES.BokujuuLoadImagesFromPath.fingerprint_inputs(str(root), "list")
             Image.new("RGB", (2, 2), (4, 5, 6)).save(root / "b.png")
-            after = NODES.BokujuuLoadImagesFromPath.fingerprint_inputs(str(root))
+            after = NODES.BokujuuLoadImagesFromPath.fingerprint_inputs(str(root), "list")
 
         self.assertNotEqual(before, after)
         self.assertIsInstance(NODES.BokujuuLoadImagesFromPath.fingerprint_inputs("images"), str)
+
+    def test_queue_mode_loads_one_image_and_submits_the_next_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (4, 1), (0, 255, 0)).save(root / "a.jpg", quality=95)
+            Image.new("RGBA", (2, 3), (255, 0, 0, 128)).save(root / "b.png")
+            prompt = {
+                "36": {
+                    "class_type": "BokujuuLoadImagesFromPath",
+                    "inputs": {"directory": str(root), "mode": "queue", "index": 0},
+                }
+            }
+            queued = []
+
+            class Queue:
+                def __init__(self):
+                    self.currently_running = {
+                        7: (1, "job", prompt, {"client_id": "abc"}, ["36"], {"token": "secret"})
+                    }
+
+                def put(self, item):
+                    queued.append(item)
+
+            server_instance = SimpleNamespace(number=4, prompt_queue=Queue())
+            NODES.BokujuuLoadImagesFromPath.hidden = SimpleNamespace(unique_id="36")
+            import server
+            with patch.object(server.PromptServer, "instance", server_instance, create=True):
+                images = NODES.BokujuuLoadImagesFromPath.execute(str(root), "queue", 0)[0]
+                last = NODES.BokujuuLoadImagesFromPath.execute(str(root), "queue", 1)[0]
+
+        self.assertEqual(len(images), 1)
+        self.assertEqual(tuple(images[0].shape), (1, 1, 4, 3))
+        self.assertEqual(tuple(last[0].shape), (1, 3, 2, 3))
+        self.assertEqual(prompt["36"]["inputs"]["index"], 0)
+        self.assertEqual(len(queued), 1)
+        number, _, next_prompt, extra_data, outputs, sensitive = queued[0]
+        self.assertEqual(number, -4)
+        self.assertEqual(server_instance.number, 5)
+        self.assertEqual(next_prompt["36"]["inputs"]["index"], 1)
+        self.assertEqual(extra_data["client_id"], "abc")
+        self.assertEqual(outputs, ["36"])
+        self.assertEqual(sensitive, {"token": "secret"})
+        self.assertNotEqual(id(next_prompt), id(prompt))
